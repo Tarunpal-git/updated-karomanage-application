@@ -1,4 +1,4 @@
-import Config from "react-native-config";
+import AppConfig from "../utils/config";
 
 export const CONSTANT = {
   // FLAGS are now dynamic and fetched from API
@@ -37,69 +37,69 @@ export const CONSTANT = {
 };
 
 export const ORGANIZATION_PREFIX = `/organizationDetails${
-  Config.REACT_APP_MODE === "prod" ? "-prod" : ""
+  AppConfig.REACT_APP_MODE === "prod" ? "-prod" : ""
 }/`;
 export const DASHBOARD_PREFIX = `/dashboard-fnp${
-  Config.REACT_APP_MODE === "prod" ? "-prod" : ""
+  AppConfig.REACT_APP_MODE === "prod" ? "-prod" : ""
 }/`;
 export const ENQUIRY_PREFIX = `/EnquiryDetails${
-  Config.REACT_APP_MODE === "prod" ? "-prod" : ""
+  AppConfig.REACT_APP_MODE === "prod" ? "-prod" : ""
 }/`;
 export const USER_MANAGEMENT_PREFIX = `/userManagement-fnp${
-  Config.REACT_APP_MODE === "prod" ? "-prod" : ""
+  AppConfig.REACT_APP_MODE === "prod" ? "-prod" : ""
 }/`;
 export const STUDENT_PREFIX = `/student-fnp${
-  Config.REACT_APP_MODE === "prod" ? "-prod" : ""
+  AppConfig.REACT_APP_MODE === "prod" ? "-prod" : ""
 }/`;
 export const BATCH_PREFIX = `/batch-fnp${
-  Config.REACT_APP_MODE === "prod" ? "-prod" : ""
+  AppConfig.REACT_APP_MODE === "prod" ? "-prod" : ""
 }/`;
 export const ATTENDANCE_PREFIX = `/attendance-management-fnp${
-  Config.REACT_APP_MODE === "prod" ? "-prod" : ""
+  AppConfig.REACT_APP_MODE === "prod" ? "-prod" : ""
 }/`;
 export const EMPLOYEES_PREFIX = `/employeeAdmission${
-  Config.REACT_APP_MODE === "prod" ? "-prod" : ""
+  AppConfig.REACT_APP_MODE === "prod" ? "-prod" : ""
 }/`;
 export const REPORTS_PREFIX = `/reports-fnp${
-  Config.REACT_APP_MODE === "prod" ? "-prod" : ""
+  AppConfig.REACT_APP_MODE === "prod" ? "-prod" : ""
 }/`;
 export const MAIL_SERVICE_PREFIX = `/email-services-fnp${
-  Config.REACT_APP_MODE === "prod" ? "-prod" : ""
+  AppConfig.REACT_APP_MODE === "prod" ? "-prod" : ""
 }/`;
 export const TEACHER_PREFIX = `/teacher-fnp${
-  Config.REACT_APP_MODE === "prod" ? "-prod" : ""
+  AppConfig.REACT_APP_MODE === "prod" ? "-prod" : ""
 }/`;
 export const COLLEGE_PREFIX = `/college-fnp${
-  Config.REACT_APP_MODE === "prod" ? "-prod" : ""
+  AppConfig.REACT_APP_MODE === "prod" ? "-prod" : ""
 }/`;
 export const CUSTOMER_REGISTRATION_PREFIX = `/customer-registration${
-  Config.REACT_APP_MODE === "prod" ? "-prod" : ""
+  AppConfig.REACT_APP_MODE === "prod" ? "-prod" : ""
 }/`;
 export const EXPENSES_PREFIX = `/inventories-fnp${
-  Config.REACT_APP_MODE === "prod" ? "-prod" : ""
+  AppConfig.REACT_APP_MODE === "prod" ? "-prod" : ""
 }/`;
 export const TIME_TABLE_PREFIX = `/timeTable-fnp${
-  Config.REACT_APP_MODE === "prod" ? "-prod" : ""
+  AppConfig.REACT_APP_MODE === "prod" ? "-prod" : ""
 }/`;
 export const CLASSROOM_PREFIX = `/classroom-fnp${
-  Config.REACT_APP_MODE === "prod" ? "-prod" : ""
+  AppConfig.REACT_APP_MODE === "prod" ? "-prod" : ""
 }/`;
  
 
 export const NOTIFICATION_HUB_PREFIX = `/notification-hub-fnp${
-  Config.REACT_APP_MODE === "prod" ? "-prod" : ""
+  AppConfig.REACT_APP_MODE === "prod" ? "-prod" : ""
 }/`;
 
 export const ORGANIZATION_INTEGRATIONS_PREFIX = `/organizationIntegrations-fnp${
-  Config.REACT_APP_MODE === "prod" ? "-prod" : ""
+  AppConfig.REACT_APP_MODE === "prod" ? "-prod" : ""
 }/`;
 
 export const AGENT_MANAGEMENT_PREFIX = `/agent-management-fnp${
-  Config.REACT_APP_MODE === "prod" ? "-prod" : ""
+  AppConfig.REACT_APP_MODE === "prod" ? "-prod" : ""
 }/`;
 
 export const LEAD_MANAGEMENT_PREFIX = `/leadManagement-fnp${
-  Config.REACT_APP_MODE === "prod" ? "-prod" : ""
+  AppConfig.REACT_APP_MODE === "prod" ? "-prod" : ""
 }/`;
 
 export const TESTING_STUDENT_DATA = [

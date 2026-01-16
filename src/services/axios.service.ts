@@ -1,9 +1,9 @@
 import axios, { AxiosRequestConfig, AxiosResponse } from "axios";
-import Config from "react-native-config";
+import AppConfig from "../utils/config";
 import { logout, updateServerError } from "../app/reducer/auth/auth-reducer";
 import { store } from "../app/store";
 
-const client = axios.create({ baseURL: `${Config.REACT_APP_API_BASE_QUERY}` });
+const client = axios.create({ baseURL: `${AppConfig.REACT_APP_API_BASE_QUERY}` });
 
 client.interceptors.request.use((config) => {
   const organization = store.getState().auth.selectedOrganization;
@@ -55,8 +55,8 @@ export const request = async (options: AxiosRequestConfig<any>) => {
   console.log("=== END REQUEST FUNCTION LOGS ===");
 
   client.defaults.headers.common[
-    `${Config.REACT_APP_SUBSCRIPTION_HEADER}`
-  ] = `${Config.REACT_APP_SUBSCRIPTION_KEY}`;
+    `${AppConfig.REACT_APP_SUBSCRIPTION_HEADER}`
+  ] = `${AppConfig.REACT_APP_SUBSCRIPTION_KEY}`;
 
   const onSuccess = (response: AxiosResponse) => {
     console.log("=== RESPONSE SUCCESS LOGS ===");

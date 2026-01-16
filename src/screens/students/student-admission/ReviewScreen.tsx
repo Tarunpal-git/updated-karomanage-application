@@ -84,6 +84,38 @@ const ReviewScreen = () => {
         return `${day}-${month}-${year}`;
       };
 
+      // Helper function to generate unique ID (similar to UUID.slice(0, 8))
+      // Web uses: uuidv4().slice(0, 8) - generates 8 character hex string (0-9, a-f)
+      // Example: "a669db6f" - mix of letters and numbers
+      const generateUniqueId = () => {
+        // Generate 8-character hex string (similar to UUID format: 0-9, a-f)
+        // This ensures we get both letters and numbers like web version
+        let result = '';
+        const hexChars = '0123456789abcdef'; // Hexadecimal characters
+        
+        // Generate 8 random hex characters
+        for (let i = 0; i < 8; i++) {
+          result += hexChars[Math.floor(Math.random() * 16)];
+        }
+        
+        return result;
+      };
+
+      // Generate rollNo like web: {organizationPrefix}-{8charRandomId}
+      // Example: "RO-a669db6f" where "RO-" is org prefix and "a669db6f" is random ID
+      const organizationId = selectedOrganization?.organizationId || '';
+      const orgPrefix = organizationId ? organizationId.split('-')[0] + '-' : '';
+      const randomId = generateUniqueId();
+      const generatedRollNo = orgPrefix + randomId;
+
+      console.log('🎲 Generated Roll Number:', {
+        organizationId,
+        orgPrefix,
+        randomId,
+        generatedRollNo,
+        enrollmentNumber: data.studentEnrollmentNumber
+      });
+
       // Map context data to API payload based on web implementation
       const payload = {
         user: {
@@ -95,7 +127,7 @@ const ReviewScreen = () => {
           userEmployeeId: 'TOP-9d8a8',
         },
         customerId: selectedOrganization?.customerId || '',
-        rollNo: data.studentEnrollmentNumber || '',
+        rollNo: generatedRollNo, // ✅ Web जैसा unique generated rollNo
         organizationId: selectedOrganization?.organizationId || '',
         studentFirstName: data.studentFirstName || '',
         studentLastName: data.studentLastName || '',
@@ -267,6 +299,38 @@ const ReviewScreen = () => {
         installments: (data as any).installments
       });
       
+      // 📤 COMPLETE STUDENT ADMISSION PAYLOAD - API को जाने वाला पूरा payload
+      console.log('📤 ============================================');
+      console.log('📤 STUDENT ADMISSION API PAYLOAD (COMPLETE)');
+      console.log('📤 ============================================');
+      console.log('📤 Full Payload (JSON):', JSON.stringify(payload, null, 2));
+      console.log('📤 Full Payload (Object):', payload);
+      console.log('📤 Payload Keys:', Object.keys(payload));
+      console.log('📤 ============================================');
+      console.log('📤 Payload Breakdown:');
+      console.log('📤   - User Info:', payload.user);
+      console.log('📤   - Customer ID:', payload.customerId);
+      console.log('📤   - Organization ID:', payload.organizationId);
+      console.log('📤   - Roll No:', payload.rollNo);
+      console.log('📤   - Student Name:', `${payload.studentFirstName} ${payload.studentLastName}`);
+      console.log('📤   - Student Email:', payload.studentEmail);
+      console.log('📤   - Student Enrollment Number:', payload.studentEnrollmentNumber);
+      console.log('📤   - Course:', payload.basicOrgAndCourseDetail?.courseName);
+      console.log('📤   - Batch:', payload.batch?.[0]?.batchId);
+      console.log('📤   - Payment Details:', {
+        isPartPayment: payload.paymentDetails?.isPartPayment,
+        totalPayment: payload.paymentDetails?.totalPayment,
+        discountedPaymentAmount: payload.paymentDetails?.discountedPaymentAmount,
+        totalReceivedPayment: payload.paymentDetails?.totalReceivedPayment,
+        allPaymentStatus: payload.paymentDetails?.allPaymentStatus,
+        cgstPercentage: payload.paymentDetails?.cgstPercentage,
+        sgstPercentage: payload.paymentDetails?.sgstPercentage,
+        inclusionType: payload.paymentDetails?.inclusionType,
+        installmentCount: payload.paymentDetails?.installmentDetails?.length || 0
+      });
+      console.log('📤   - Installments:', payload.paymentDetails?.installmentDetails || 'N/A');
+      console.log('📤 ============================================');
+      
       const response = await mutateAsync(payload as any);
       
       console.log('🎓 Student admission response:', response);
@@ -333,7 +397,7 @@ const ReviewScreen = () => {
   const renderSection = (title: string, data: any, icon?: string) => (
     <View style={styles.section}>
       <View style={styles.sectionHeader}>
-        {icon && <ScalableText style={styles.sectionIcon}>{icon}</ScalableText>}
+        {icon && <ScalableText style={styles.sectionIcon} fontFamily="Medium">{icon}</ScalableText>}
         <ScalableText style={styles.sectionTitle} fontFamily="Medium">{title}</ScalableText>
       </View>
       <View style={styles.sectionContent}>
@@ -354,22 +418,22 @@ const ReviewScreen = () => {
     </View>
   );
 
-  return (
-    <SafeView>
-      <AppHeader
+        return (
+        <SafeView>
+        <AppHeader
         title="Student Review Page"
         showDrawer={false}
         handleBackClick={goBackWithConfirmation}
-      />
-      <View style={styles.screenRoot}>
-        <View style={styles.mainContainer}>
+        />
+          <View style={styles.screenRoot}>
+          <View style={styles.mainContainer}>
           {/* Review Details - Full Width */}
           <View style={styles.fullWidthPanel}>
-            <ScrollView 
+              <ScrollView 
               style={styles.scrollView}
               showsVerticalScrollIndicator={false}
               contentContainerStyle={styles.scrollContent}
-            >
+              >
               <View style={styles.reviewHeader}>
         
                 <ScalableText style={styles.stepIndicator} fontFamily="Regular">

@@ -17,7 +17,7 @@ import { Pressable, Share, StyleSheet, ToastAndroid } from "react-native";
 import { COLORS } from "../../colors";
 import Flex from "../../@ui/flex/Flex";
 import QRCode from "react-native-qrcode-svg";
-import Config from "react-native-config";
+import AppConfig from "../../utils/config";
 import Button from "../../@ui/button/Button";
 import AutoHeightImage from "../../@ui/auto-height-image/AutoHeightImage";
 import { IMAGES } from "../../images";
@@ -70,7 +70,7 @@ export const BottomSheetProvider: React.FC<BottomSheetProviderProps> = ({
 
   const value = useMemo(() => ({ handlePresentModal }), [handlePresentModal]);
 
-  const QR_URL = `${Config.REACT_APP_FORM_BASE_URL}/${organization.organizationId}?userId=${organization.customerId}&organizationEmail=${organization.organizationEmail}&organizationName=${organization.organizationName}`;
+  const QR_URL = `${AppConfig.REACT_APP_FORM_BASE_URL}/${organization.organizationId}?userId=${organization.customerId}&organizationEmail=${organization.organizationEmail}&organizationName=${organization.organizationName}`;
 
   const handleShareQr = () => {
     Share.share({

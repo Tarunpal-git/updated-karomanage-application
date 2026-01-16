@@ -25,7 +25,7 @@ import { useSendOTPMutation } from "../../../apis/hooks/enquiry/mutation/useSend
 import { useCaptchaResponseMutation } from "../../../apis/hooks/enquiry/mutation/useCaptchaResponse.mutation";
 import { useGetWalletHistoryQuery } from "../../../apis/hooks/organization/query/useGetWalletHistory.query";
 import CryptoJS from "crypto-js";
-import Config from "react-native-config";
+import AppConfig from "../../../utils/config";
 import { WebView } from "react-native-webview";
 
 const GenerateEnquiry = () => {
@@ -281,8 +281,8 @@ const GenerateEnquiry = () => {
     try {
       // Try to get SECRET_KEY from environment variable (same as web implementation)
       let SECRET_KEY_HEX =
-        (Config as any).REACT_APP_SECRET_KEY ||
-        (Config as any).NEXT_PUBLIC_SECRET_KEY;
+        (AppConfig as any).REACT_APP_SECRET_KEY ||
+        (AppConfig as any).NEXT_PUBLIC_SECRET_KEY;
 
       // Temporary fallback: Use hardcoded value if env variable not found
       if (!SECRET_KEY_HEX) {

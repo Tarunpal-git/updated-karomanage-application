@@ -10,7 +10,7 @@ import AutoHeightImage from "../../../../@ui/auto-height-image/AutoHeightImage";
 import { IMAGES } from "../../../../images";
 import { useAppSelector } from "../../../../app/hooks";
 import QRCode from "react-native-qrcode-svg";
-import Config from "react-native-config";
+import AppConfig from "../../../../utils/config";
 import RNFS from "react-native-fs";
 import Clipboard from "@react-native-clipboard/clipboard";
 
@@ -52,7 +52,7 @@ const ShowFormQrModal: FC<IShowFormQrModal> = ({
     });
   };
 
-  const URL = `${Config.REACT_APP_FORM_BASE_URL}/${data.organizationId}?userId=${data.customerId}&organizationEmail=${organization.organizationEmail}&organizationName=${organization.organizationName}&formTemplateId=${data.formTemplateId}`;
+  const URL = `${AppConfig.REACT_APP_FORM_BASE_URL}/${data.organizationId}?userId=${data.customerId}&organizationEmail=${organization.organizationEmail}&organizationName=${organization.organizationName}&formTemplateId=${data.formTemplateId}`;
 
   const handleCopyClick = () => {
     Clipboard.setString(URL);
