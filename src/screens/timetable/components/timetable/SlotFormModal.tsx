@@ -17,7 +17,6 @@ import { Picker } from "@react-native-picker/picker";
 import { useTeachersListQuery } from "../../../../apis/hooks/teachers/query/useTeachersList.query";
 import { useGetClassroomListQuery } from "../../../../apis/hooks/teachers/query/useGetClassroomList.query";
 import { useCourseDetailsQuery } from "../../../../apis/hooks/course/query/useCourseDetails.query";
-import { useBatchDetailsQuery } from "../../../../apis/hooks/batch/query/useBatchDetails.query";
 import { useCreateTimeTableMutation } from "../../../../apis/hooks/timetable/mutations/useCreateTimeTable.mutation";
 import { useUpdateTimeTableMutation } from "../../../../apis/hooks/timetable/mutations/useUpdateTimeTable.mutation";
 import { useDeleteTimeTableMutation } from "../../../../apis/hooks/timetable/mutations/useDeleteTimeTable.mutation";
@@ -123,52 +122,15 @@ const SlotFormModal = ({
   // ⭐ CLASSROOM LIST API
   const { data: classroomData } = useGetClassroomListQuery();
 
-  // ⭐ Selected batch info from batch list (basic info only, no courses)
+  // ⭐ Selected batch info + courseId
   const selectedBatchInfo = useMemo(() => {
     if (batchData?.statusCode === 200 && Array.isArray(batchData.data) && selectedBatchId) {
-      const found = batchData.data.find((b: any) => b.batchId === selectedBatchId) || null;
-      console.log("📋 selectedBatchInfo found:", found ? "yes" : "no");
-      console.log("📋 batchData:", batchData);
-      console.log("📋 selectedBatchId:", selectedBatchId);
-      return found;
+      return batchData.data.find((b: any) => b.batchId === selectedBatchId) || null;
     }
-    console.warn("⚠️ selectedBatchInfo not found - batchData status:", batchData?.statusCode, "isArray:", Array.isArray(batchData?.data), "selectedBatchId:", selectedBatchId);
     return null;
   }, [batchData, selectedBatchId]);
 
-  // ⭐ BATCH DETAILS API (full batch data with courses array)
-  // Fetch batch details to get courseId (batch list doesn't include courses array)
-  const { data: batchDetailsData, isLoading: isBatchDetailsLoading } = useBatchDetailsQuery({
-    batchId: selectedBatchId || "",
-  });
-
-  // ⭐ Get courseId from batch details (which has courses array)
-  const courseId = useMemo(() => {
-    // First try to get from batch details (which has full data including courses)
-    if (batchDetailsData?.statusCode === 200 && batchDetailsData?.data?.courses?.length > 0) {
-      const courseIdFromDetails = batchDetailsData.data.courses[0].courseId;
-      console.log("✅ courseId from batchDetails:", courseIdFromDetails);
-      return courseIdFromDetails;
-    }
-    // Fallback: try from batch list (though it usually doesn't have courses)
-    const courseIdFromList = selectedBatchInfo?.courses?.[0]?.courseId || "";
-    if (courseIdFromList) {
-      console.log("✅ courseId from batchList:", courseIdFromList);
-      return courseIdFromList;
-    }
-    console.warn("⚠️ courseId not found in batchDetails or batchList");
-    return "";
-  }, [batchDetailsData, selectedBatchInfo]);
-  
-  // Debug logging for courseId
-  useEffect(() => {
-    if (visible) {
-      console.log("📋 CourseId derived:", courseId);
-      console.log("📋 batchDetailsData:", batchDetailsData);
-      console.log("📋 batchDetailsData?.data?.courses:", batchDetailsData?.data?.courses);
-      console.log("📋 selectedBatchInfo?.courses:", selectedBatchInfo?.courses);
-    }
-  }, [courseId, visible, batchDetailsData, selectedBatchInfo]);
+  const courseId = selectedBatchInfo?.courses?.[0]?.courseId || "";
 
   // ⭐ COURSE DETAIL API (subjects ke liye)
   const { data: courseDetailData } = useCourseDetailsQuery({
@@ -1011,6 +973,7 @@ const SlotFormModal = ({
           {/* Title */}
           <Text style={styles.title}>
             {isEditMode ? "Update Slot" : `Add New Slot for ${selectedBatch}`}
+            
           </Text>
 
           {/* SUBJECT */}
@@ -1041,20 +1004,10 @@ const SlotFormModal = ({
             <TouchableOpacity
               style={styles.plusBtn}
               onPress={() => {
-                console.log("➕ Subject + button pressed");
-                console.log("➕ courseId:", courseId);
-                console.log("➕ selectedBatchInfo:", selectedBatchInfo);
-                console.log("➕ selectedBatchId:", selectedBatchId);
-                
                 if (courseId) {
                   onClose(); // Close slot form modal first
-                  // Use requestAnimationFrame to ensure modal closes before navigation
-                  requestAnimationFrame(() => {
-                    console.log("🚀 Navigating to CourseDetails with courseId:", courseId);
-                    navigation.navigate("CourseDetails", { courseId, autoOpenEdit: true });
-                  });
+                  navigation.navigate("CourseDetails", { courseId, autoOpenEdit: true });
                 } else {
-                  console.error("❌ Course ID not found. selectedBatchInfo:", selectedBatchInfo);
                   Alert.alert("Error", "Course ID not found. Please select a batch first.");
                 }
               }}
@@ -1136,6 +1089,7 @@ const SlotFormModal = ({
           {/* Teacher Dropdown List */}
           {teacherDropdownOpen && selectedSubject && (
             <View style={styles.cascadingDropdown}>
+              <Text style={styles.cascadingDropdownTitle}>Select teacher</Text>
               <ScrollView style={styles.cascadingDropdownList} nestedScrollEnabled>
                 {teacherOptions.length > 0 ? (
                   teacherOptions.map((teacher: { value: string; label: string }) => {
@@ -1156,7 +1110,7 @@ const SlotFormModal = ({
                   })
                 ) : (
                   <View style={styles.cascadingDropdownItem}>
-                    <Text style={styles.cascadingDropdownItemText}>Data not found</Text>
+                    <Text style={styles.cascadingDropdownItemText}>No teachers found</Text>
                   </View>
                 )}
               </ScrollView>
@@ -1434,19 +1388,21 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     textAlign: "center",
     marginBottom: 16,
+    color: "#000000",
   },
   label: {
     fontSize: 14,
     fontWeight: "600",
     marginTop: 12,
     marginBottom: 4,
+    color: "#000000",
   },
   dropdownBox: {
     flex: 1,
     
     height: 45,             
     borderWidth: 1,
-    borderColor: "#C9D4F1",
+    borderColor: "#9CA3AF",
     borderRadius: 10,
     overflow: "hidden",
     justifyContent: "center"
@@ -1479,6 +1435,7 @@ const styles = StyleSheet.create({
   repeatLabel: {
     fontSize: 14,
     fontWeight: "600",
+    color: "#000000", 
   },
   daysRow: {
     flexDirection: "row",
@@ -1754,10 +1711,10 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   dropdownPlaceholder: {
-    color: "#9CA3AF",
+    color: "#6B7280",
   },
   dropdownArrow: {
-    color: "#9CA3AF",
+    color: "#6B7280",
     fontSize: 12,
     marginLeft: 8,
   },
@@ -1768,7 +1725,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFF",
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: "#C9D4F1",
+    borderColor: "#9CA3AF",
     marginTop: 8,
     marginBottom: 8,
     maxHeight: 250,
