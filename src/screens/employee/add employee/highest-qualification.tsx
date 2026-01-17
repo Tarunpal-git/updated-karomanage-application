@@ -125,9 +125,9 @@ export default function HighestQualification() {
 
         {/* Footer Buttons */}
         <View style={styles.bottomRow}>
-          <Button title="Back" btnStyles={styles.back} onPress={()=>navigation.goBack()}/>
-          <Button title="Skip" btnStyles={styles.next} onPress={onSkip}/>
-          <Button title="Next" btnStyles={styles.next} onPress={onNext}/>
+        <Button title="Back" btnStyles={styles.back} btnTxtStyles={{fontSize:16}} onPress={()=>navigation.goBack()}/>
+        <Button title="Skip" btnStyles={styles.next} btnTxtStyles={{fontSize:16}} onPress={onSkip}/>
+        <Button title="Next" btnStyles={styles.next} btnTxtStyles={{fontSize:16}} onPress={onNext}/>
         </View>
 
       </View>
@@ -157,7 +157,7 @@ const styles = StyleSheet.create({
 
   bottomRow:{flexDirection:"row",width:"90%",marginTop:25,marginBottom:18,justifyContent:"space-between"},
 
-  back:{flex:1,height:50,backgroundColor:"#E5E5E5",marginRight:8,borderRadius:10},
+  back:{flex:1,height:50,backgroundColor:"#003B73",marginRight:8,borderRadius:10,},
   next:{flex:1,height:50,backgroundColor:"#003B73",marginLeft:8,borderRadius:10},
   
   errorMsg:{color:"red",fontSize:12,marginTop:4,marginLeft:4}

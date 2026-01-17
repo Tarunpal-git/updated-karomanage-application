@@ -22,6 +22,7 @@ import { agentManagementUrls } from "./agentManagement.urls";
 import { timeTableUrls } from "./timeTable.urls";
 import { classroomUrls } from "./classroom.urls";
 import { walletUrls } from "./wallet.urls";
+import { manualUrls } from "./manual.urls";
 
 
 export const apiUrls = {
@@ -49,4 +50,6 @@ export const apiUrls = {
   timetable: timeTableUrls,
   classroom: classroomUrls,
   wallet: walletUrls,
+  manual: manualUrls,
 };
+export { manualUrls };

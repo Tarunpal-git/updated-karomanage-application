@@ -1,5 +1,5 @@
-import { ORGANIZATION_PREFIX, CUSTOMER_REGISTRATION_PREFIX } from "../../constants";
-export const organizationUrls = {
+  import { ORGANIZATION_PREFIX, CUSTOMER_REGISTRATION_PREFIX } from "../../constants";
+  export const organizationUrls = {
   FETCH_ORGANIZATION_LISTS: ORGANIZATION_PREFIX + "listOrganizations",
   FETCH_ORGANIZATION_DETAILS: ORGANIZATION_PREFIX + "getSingleOrganization",
   CREATE_COURSE: ORGANIZATION_PREFIX + "createCourse",
@@ -7,4 +7,5 @@ export const organizationUrls = {
   CREATE_ORGANIZATION: ORGANIZATION_PREFIX + "createOrganization",
   JOIN_ORGANIZATION: ORGANIZATION_PREFIX + "joinOrganization",
   GET_EMAIL_NOTIFICATION: ORGANIZATION_PREFIX + "getEmailNotification",
-};
+  ACCEPT_INVITATION: ORGANIZATION_PREFIX + "acceptInvitaion",
+  };
