@@ -10,7 +10,7 @@ import ActionIcon from "../../../../@ui/action-icon/ActionIcon";
 import AutoHeightImage from "../../../../@ui/auto-height-image/AutoHeightImage";
 import { IMAGES } from "../../../../images";
 import { forms } from "../../../../forms";
-import { useGenerateEnquiryMutation } from "../../../../apis/hooks/enquiry/mutation/useGenerateEnquiry.mutation";
+import { useCreateLeadsMutation } from "../../../../apis/hooks/lead-management/mutation/useCreateLeads.mutation";
 import { useAppSelector } from "../../../../app/hooks";
 import { useNavigation } from "@react-navigation/native";
 import { TScreenNavigator } from "../../../../types/navigator/screen-navigator";
@@ -30,7 +30,7 @@ const CreateEnquiryConfirmation: FC<ICreateEnquiryConfirmation> = ({
 }) => {
   const navigation = useNavigation<TScreenNavigator>();
 
-  const { mutateAsync } = useGenerateEnquiryMutation();
+  const { mutateAsync } = useCreateLeadsMutation();
   const { selectedOrganization } = useAppSelector((state) => state.auth);
 
   const [loading, setLoading] = useState({
@@ -44,35 +44,49 @@ const CreateEnquiryConfirmation: FC<ICreateEnquiryConfirmation> = ({
       assign: action === "skip" ? false : true,
     });
 
-    const res = await mutateAsync({
-      ...data,
-      customerID: selectedOrganization?.customerId ?? "",
-      organizationId: selectedOrganization?.organizationId ?? "",
-      status: "active",
-      studentName: data.studentName,
-      followUp: [],
-    });
+    try {
+      const res = await mutateAsync({
+        studentName: data.studentName,
+        mobileNumber: data.mobileNumber,
+        email: data.email,
+        enquiryCourse: data.enquiryCourse,
+        courseDescription: data.courseDescription,
+      });
 
-    if (res.id) {
-      action === "skip"
-        ? navigation.navigate("EnquiryLists")
-        : navigation.navigate("AssignManager", { leads: [res] });
+      if (res?.id || res?.leadId) {
+        action === "skip"
+          ? navigation.navigate("EnquiryLists")
+          : navigation.navigate("AssignManager", { leads: [res] });
 
+        setLoading({
+          skip: false,
+          assign: false,
+        });
+
+        refetch();
+        handleClose();
+      } else {
+        setLoading({
+          skip: false,
+          assign: false,
+        });
+
+        customAlert.show({
+          message: "Lead not created. Try again later",
+        });
+      }
+    } catch (error: any) {
       setLoading({
         skip: false,
         assign: false,
       });
 
-      refetch();
-      handleClose();
-    } else {
-      setLoading({
-        skip: false,
-        assign: false,
-      });
-
+      const errorMessage =
+        error?.response?.data?.message ||
+        error?.message ||
+        "Failed to create lead. Please try again.";
       customAlert.show({
-        message: "Enquiry not generated. Try again later",
+        message: errorMessage,
       });
     }
   };

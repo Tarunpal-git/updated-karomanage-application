@@ -5,7 +5,13 @@ import { yupResolver } from '@hookform/resolvers/yup';
 import * as yup from 'yup';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useStudentDetailsQuery } from '../../../apis/hooks/students/query/useStudentDetails.query';
-import { useUpdateStudentMutation } from '../../../apis/hooks/students/mutation/useUpdateStudent.mutation.ts';
+import { useQueryClient } from '@tanstack/react-query';
+import { useUpdateStudentMutation } from '../../../apis/hooks/students/mutation/useUpdateStudent.mutation';
+import { useDeleteStudentMutation } from '../../../apis/hooks/students/mutation/useDeleteStudent.mutation';
+import { useUpdateStudentAndBatchInCourseMutation } from '../../../apis/hooks/organization/mutation/useUpdateStudentAndBatchInCourse.mutation';
+import { apiUrls } from '../../../apis/urls';
+import { useSelector } from 'react-redux';
+import { RootState } from '../../../app/store';
 import SafeView from '../../../@ui/safe-view/SafeView';
 import AppHeader from '../../../@ui/app-header/AppHeader';
 import Input from '../../../@ui/input/Input';
@@ -53,6 +59,8 @@ const EditStudentScreen = () => {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const { studentData } = route.params || {};
+  const queryClient = useQueryClient();
+  const { authUser, selectedOrganization } = useSelector((state: RootState) => state.auth);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [customFields, setCustomFields] = useState<any[]>(studentData?.studentDynamicFields || []);
   
@@ -62,6 +70,8 @@ const EditStudentScreen = () => {
   
   // Update mutation
   const { mutateAsync: updateStudent, isPending } = useUpdateStudentMutation();
+  const { mutateAsync: deleteStudent } = useDeleteStudentMutation();
+  const { mutateAsync: updateStudentAndBatchInCourse } = useUpdateStudentAndBatchInCourseMutation();
 
   const handler = useForm({
     defaultValues: {
@@ -111,30 +121,54 @@ const EditStudentScreen = () => {
     setIsSubmitting(true);
     
     try {
+      const previousStatus = studentDetails?.studentStatus || 'active';
+      const newStatus = values.studentStatus;
+
+      // Build studentDynamicFields from customFields
+      const studentDynamicFields = customFields.map((field: any, index: number) => {
+        const fieldName = Object.keys(field).find(key => key !== 'type') || '';
+        const fieldValue = field[fieldName];
+        const fieldType = field.type || 'text';
+        
+        // Get the value from form if it exists, otherwise use existing value
+        const formFieldName = `customField_${index}`;
+        const allFormValues = handler.getValues();
+        const formValue = (allFormValues as any)[formFieldName];
+        
+        const dynamicField: any = {};
+        if (fieldName) {
+          dynamicField[fieldName] = formValue !== undefined && formValue !== '' ? formValue : fieldValue || '';
+        }
+        dynamicField.type = fieldType;
+        
+        return dynamicField;
+      });
+
       // Merge existing student data with updated values
       const updatePayload = {
-        ...studentDetails, // Keep existing data
         rollNo: studentDetails.rollNo,
         studentFirstName: values.studentFirstName,
         studentLastName: values.studentLastName,
+        studentEnrollmentNumber: studentDetails?.studentEnrollmentNumber || studentDetails?.enrollmentNumber || '',
         studentEmail: values.studentEmail,
         studentContact: values.studentContact,
         studentFatherName: values.studentFatherName,
         studentFatherContact: values.studentFatherContact,
         studentAddress: values.studentAddress,
         studentGender: values.studentGender,
-        studentDateOfBirth: values.studentDateOfBirth,
+        studentDateOfBirth: values.studentDateOfBirth || null,
         dateOfAdmission: values.dateOfAdmission,
         collegeName: values.collegeName,
         collegeCourse: values.collegeCourse,
         departmentName: values.departmentName,
         collegeSemester: values.collegeSemester,
-        studentStatus: values.studentStatus,
+        studentStatus: newStatus,
         // Map form fields to API fields
         studentCollage: values.collegeName,
         studentCourse: values.collegeCourse,
         studentDepartmentName: values.departmentName,
         studentSemester: values.collegeSemester,
+        studentDynamicFields: studentDynamicFields,
       };
 
       console.log('📝 === UPDATE STUDENT PAYLOAD ===');
@@ -144,7 +178,77 @@ const EditStudentScreen = () => {
       
       console.log('📝 Update response:', response);
       
-      if (response.statusCode === 200) {
+      // Handle response structure - could be response.data or response directly
+      const responseData = (response as any)?.data || response;
+      const statusCode =
+        (response as any)?.statusCode ??
+        (responseData as any)?.statusCode ??
+        (response as any)?.status;
+      
+      if (statusCode === 200 || statusCode === 201) {
+        const statusChanged = previousStatus !== newStatus;
+
+        if (statusChanged) {
+          // 1) Call deleteStudentDetails API to update status on main student record
+          try {
+            const deletePayload = {
+              user: {
+                userCustomerId: authUser?.customerId || '',
+                userCustomerName: authUser?.customerName || '',
+                userCustomerEmail: authUser?.customerEmail || '',
+                roleName: (selectedOrganization as any)?.role?.roleName || '',
+                roleId: (selectedOrganization as any)?.role?.roleId || '',
+                userEmployeeId: selectedOrganization?.organizationId || '',
+              },
+              customerId: selectedOrganization?.customerId || '',
+              rollNo: studentDetails.rollNo,
+              organizationId: selectedOrganization?.organizationId || '',
+              studentStatus: newStatus,
+            };
+
+            console.log('🗑️ === STATUS UPDATE VIA DELETE STUDENT CALL ===');
+            console.log('Payload:', JSON.stringify(deletePayload, null, 2));
+            const deleteResp = await deleteStudent(deletePayload);
+            console.log('🗑️ Status update response:', deleteResp);
+          } catch (deleteError) {
+            console.log('⚠️ Error while updating status via deleteStudentDetails:', deleteError);
+          }
+
+          // 2) Call updateStudentAndBatchInCourse for each course (if any)
+          try {
+            const courses = (studentDetails as any)?.courses || [];
+            if (Array.isArray(courses) && courses.length > 0) {
+              for (const course of courses) {
+                if (!course?.courseId) continue;
+
+                await updateStudentAndBatchInCourse({
+                  courseId: course.courseId,
+                  rollNo: studentDetails.rollNo,
+                  studentStatus: newStatus,
+                });
+              }
+            }
+          } catch (courseError) {
+            console.log('⚠️ Error while updating student & batch in course:', courseError);
+          }
+        }
+
+        // Invalidate student related queries so that listing/profile screens get fresh data
+        try {
+          const rollNo = studentDetails?.rollNo || studentData?.rollNo || updatePayload.rollNo;
+          if (rollNo) {
+            await queryClient.invalidateQueries({
+              queryKey: [apiUrls.student.FETCH_STUDENT_DETAILS, rollNo],
+            });
+          }
+          // Also refresh student list (if any screen uses it)
+          await queryClient.invalidateQueries({
+            queryKey: [apiUrls.student.FETCH_ALL_STUDENTS],
+          });
+        } catch (e) {
+          console.log('⚠️ Error invalidating student queries', e);
+        }
+
         Alert.alert(
           'Success', 
           'Student details updated successfully!',
@@ -158,7 +262,7 @@ const EditStudentScreen = () => {
           ]
         );
       } else {
-        throw new Error(response.message || 'Failed to update student');
+        throw new Error(responseData?.message || response?.message || 'Failed to update student');
       }
     } catch (error) {
       console.error('Update error:', error);
@@ -167,11 +271,9 @@ const EditStudentScreen = () => {
       setIsSubmitting(false);
     }
   };
-
   const onCancel = () => {
     navigation.goBack();
   };
-
   if (isLoading) {
     return (
       <SafeView>
@@ -181,7 +283,7 @@ const EditStudentScreen = () => {
           showDrawer={false}
         />
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={COLORS.primary} />
+          <ActivityIndicator size="large" color={COLORS.primary}/>
           <ScalableText style={styles.loadingText} fontFamily="Medium">Loading student details...</ScalableText>
         </View>
       </SafeView>
