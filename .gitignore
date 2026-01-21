@@ -19,6 +19,8 @@ captures/
 *.jar
 *.war
 *.ear
+*.env
+
 
 # Node / React Native
 node_modules/
