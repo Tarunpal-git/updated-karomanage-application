@@ -87,8 +87,15 @@ const StudentProfile = () => {
       
       console.log('🗑️ Delete response:', response);
       
-      // Check for success in different response formats
-      if (response?.statusCode === 200 || response?.status === 200 || response?.success === true) {
+      // Normalize status code from different possible shapes
+      const respStatusCode = response?.statusCode ?? response?.status;
+      const isSuccess =
+        respStatusCode === 200 ||
+        respStatusCode === 201 ||
+        respStatusCode === 204 ||
+        response?.success === true;
+
+      if (isSuccess) {
         console.log('✅ Student processed successfully');
         
         // Navigate to student list screen

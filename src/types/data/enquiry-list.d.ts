@@ -17,6 +17,7 @@ type TEnquiryData = {
   studentName: string;
   enquiryCourse: string;
   status: string;
+  lastFollowUpStatus?: string;
   mobileNumber: string;
   email: string;
   parentName: string;

@@ -93,7 +93,7 @@ const StudentDetails = () => {
               navigation.navigate("StudentProfile", { rollNo: rollNo })
             }
           >
-            <AutoHeightImage source={IMAGES.profilePrimaryIcon} width={30} />
+            <AutoHeightImage source={IMAGES.profilePrimaryIcon} width={30} styles={{ marginHorizontal: 20}} />
           </ActionIcon>
         }
         showDrawer={false}

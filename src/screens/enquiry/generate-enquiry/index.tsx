@@ -46,6 +46,7 @@ const GenerateEnquiry = () => {
   } | null>(null);
   const [captchaVerified, setCaptchaVerified] = useState(false);
   const [showCaptchaModal, setShowCaptchaModal] = useState(false);
+  const [captchaModalHeight, setCaptchaModalHeight] = useState(350);
   const webViewRef = useRef<any>(null);
 
   const { handlePresentModal } = useBottomSheet();
@@ -430,7 +431,10 @@ const GenerateEnquiry = () => {
                   captchaVerified && styles.captchaButtonVerified,
                 ]}
                 activeOpacity={0.8}
-                onPress={() => setShowCaptchaModal(true)}
+                onPress={() => {
+                  setCaptchaModalHeight(350); // Reset height when opening
+                  setShowCaptchaModal(true);
+                }}
                 disabled={captchaVerified}
               >
                 <ScalableText fontFamily="Regular" style={styles.captchaText}>
@@ -588,33 +592,29 @@ const GenerateEnquiry = () => {
         />
       )}
 
-      {/* CAPTCHA Full Screen Modal */}
+      {/* CAPTCHA Modal */}
       <Modal
-        animationType="slide"
-        transparent={false}
+        animationType="fade"
+        transparent
         visible={showCaptchaModal}
         onRequestClose={() => setShowCaptchaModal(false)}
-        presentationStyle="fullScreen"
       >
-        <SafeView>
-          <View style={styles.captchaModalContainer}>
-            <View style={styles.captchaModalHeader}>
-              <ScalableText fontFamily="Medium" style={styles.captchaModalTitle}>
-                Complete CAPTCHA
-              </ScalableText>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.captchaModalCard, { height: captchaModalHeight }]}>
+            <View style={styles.captchaModalBody}>
               <TouchableOpacity
                 onPress={() => setShowCaptchaModal(false)}
                 style={styles.captchaModalCloseButton}
+                activeOpacity={0.8}
               >
                 <ScalableText fontFamily="Medium" style={styles.captchaModalCloseText}>
                   ✕
                 </ScalableText>
               </TouchableOpacity>
-            </View>
-            <WebView
-              ref={webViewRef}
-              source={{
-                html: `
+              <WebView
+                ref={webViewRef}
+                source={{
+                  html: `
                   <!DOCTYPE html>
                   <html>
                     <head>
@@ -639,7 +639,6 @@ const GenerateEnquiry = () => {
                           justify-content: center;
                           align-items: center;
                         }
-                        /* Ensure reCAPTCHA modal can display properly */
                         .grecaptcha-badge,
                         iframe[title*="reCAPTCHA"] {
                           z-index: 999999 !important;
@@ -650,6 +649,14 @@ const GenerateEnquiry = () => {
                       <div id="recaptcha-container"></div>
                       <script>
                         let recaptchaWidgetId = null;
+                        function sendHeight() {
+                          try {
+                            const height = document.body.scrollHeight || document.documentElement.scrollHeight || 350;
+                            window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'layout', height: height }));
+                          } catch (e) {
+                            console.error('Error sending height:', e);
+                          }
+                        }
                         function onRecaptchaLoad() {
                           recaptchaWidgetId = grecaptcha.render('recaptcha-container', {
                             'sitekey': '6Ldn0yUqAAAAAM2IfBO-XsBQhXZGhag5Apcj6MPg',
@@ -659,46 +666,62 @@ const GenerateEnquiry = () => {
                             'theme': 'light'
                           });
                           window.recaptchaWidgetId = recaptchaWidgetId;
+                          setTimeout(sendHeight, 500);
                         }
                         function onCaptchaSuccess(token) {
                           window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'success', token: token }));
+                          setTimeout(sendHeight, 300);
                         }
                         function onCaptchaExpired() {
                           window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'expired' }));
                         }
+                        window.addEventListener('load', sendHeight);
+                        window.addEventListener('resize', sendHeight);
+                        // Monitor for puzzle/challenge appearance
+                        setInterval(sendHeight, 500);
                       </script>
                     </body>
                   </html>
                 `,
-                baseUrl: "https://portal.karomanage.com",
-              }}
-              originWhitelist={["*"]}
-              style={styles.captchaModalWebView}
-              onMessage={(event: any) => {
-                try {
-                  const data = JSON.parse(event.nativeEvent.data);
-                  if (data.type === "success" && data.token) {
-                    handleCaptchaSuccess(data.token);
-                    setShowCaptchaModal(false);
-                  } else if (data.type === "expired") {
-                    setCaptchaVerified(false);
+                  baseUrl: "https://portal.karomanage.com",
+                }}
+                originWhitelist={["*"]}
+                style={styles.captchaModalWebView}
+                onMessage={(event: any) => {
+                  try {
+                    const data = JSON.parse(event.nativeEvent.data);
+                    
+                    // Handle height updates for dynamic modal sizing
+                    if (data.type === "layout" && data.height) {
+                      const newHeight = Math.max(350, Math.min(Number(data.height) + 200, 600));
+                      setCaptchaModalHeight(newHeight);
+                      return;
+                    }
+                    
+                    if (data.type === "success" && data.token) {
+                      handleCaptchaSuccess(data.token);
+                      setShowCaptchaModal(false);
+                    } else if (data.type === "expired") {
+                      setCaptchaVerified(false);
+                    }
+                  } catch (error) {
+                    console.error("Error parsing captcha message:", error);
                   }
-                } catch (error) {
-                  console.error("Error parsing captcha message:", error);
-                }
-              }}
-              javaScriptEnabled={true}
-              domStorageEnabled={true}
-              startInLoadingState={false}
-              scalesPageToFit={true}
-              mixedContentMode="always"
-              allowsInlineMediaPlayback={true}
-              sharedCookiesEnabled={true}
-              thirdPartyCookiesEnabled={true}
-            />
+                }}
+                javaScriptEnabled={true}
+                domStorageEnabled={true}
+                startInLoadingState={false}
+                scalesPageToFit={true}
+                mixedContentMode="always"
+                allowsInlineMediaPlayback={true}
+                sharedCookiesEnabled={true}
+                thirdPartyCookiesEnabled={true}
+              />
+            </View>
           </View>
-        </SafeView>
+        </View>
       </Modal>
+
 
       {/* Wallet Recharge Modal */}
       <Modal
@@ -785,7 +808,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.white,
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
+    justifyContent: "center",
   },
   captchaButtonVerified: {
     borderColor: COLORS.primary,
@@ -795,39 +818,19 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: COLORS.black,
   },
-  captchaModalContainer: {
-    flex: 1,
+  captchaWebViewContainer: {
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: COLORS.border,
     backgroundColor: COLORS.white,
+    overflow: "hidden",
+    minHeight: 80,
   },
-  captchaModalHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    padding: 20,
-    paddingTop: 50,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-    backgroundColor: COLORS.white,
-  },
-  captchaModalTitle: {
-    fontSize: 18,
-    color: COLORS.black,
-  },
-  captchaModalCloseButton: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: COLORS.border,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  captchaModalCloseText: {
-    fontSize: 18,
-    color: COLORS.black,
-  },
-  captchaModalWebView: {
-    flex: 1,
-    backgroundColor: "#f5f5f5",
+  captchaInlineWebView: {
+    backgroundColor: "transparent",
+    minHeight: 80,
+    width: "100%",
+    height: "100%",
   },
   otpContainer: {
     marginTop: 10,
@@ -875,6 +878,59 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: COLORS.primary,
     textDecorationLine: "underline",
+  },
+  captchaModalCard: {
+    backgroundColor: 'transparent',
+    borderRadius: 16,
+    paddingHorizontal: 18,
+    paddingTop: 16,
+    paddingBottom: 18,
+    width: "92%",
+    minHeight: 350,
+    maxHeight: 600,
+    
+  },
+  captchaModalHeaderRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  captchaModalTitle: {
+    fontSize: 18,
+    color: COLORS.black,
+  },
+  captchaModalCloseButton: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: COLORS.border,
+    justifyContent: "center",
+    alignItems: "center",
+    position: "absolute",
+    top: 10,
+    right: 10,
+    zIndex: 10,
+  },
+  captchaModalCloseText: {
+    fontSize: 18,
+    color: COLORS.black,
+ 
+  },
+  captchaModalSubtitle: {
+    fontSize: 13,
+    color: COLORS.muted,
+    marginBottom: 12,
+  },
+  captchaModalBody: {
+    borderRadius: 10,
+    overflow: "hidden",
+    backgroundColor: "#f5f5f5",
+    height: 500,
+    position: "relative",
+  },
+  captchaModalWebView: {
+    flex: 1,
   },
   modalOverlay: {
     flex: 1,

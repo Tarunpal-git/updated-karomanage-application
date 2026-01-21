@@ -23,6 +23,7 @@ import { timeTableUrls } from "./timeTable.urls";
 import { classroomUrls } from "./classroom.urls";
 import { walletUrls } from "./wallet.urls";
 import { manualUrls } from "./manual.urls";
+import { leadManagementUrls } from "./leadManagement.urls";
 
 
 export const apiUrls = {
@@ -51,5 +52,6 @@ export const apiUrls = {
   classroom: classroomUrls,
   wallet: walletUrls,
   manual: manualUrls,
+  leadManagement: leadManagementUrls,
 };
 export { manualUrls };

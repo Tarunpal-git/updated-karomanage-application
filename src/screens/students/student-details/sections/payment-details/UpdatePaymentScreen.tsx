@@ -1,5 +1,5 @@
 import React, { FC, useState, useMemo, useEffect } from "react";
-import { StyleSheet, View, Alert, TouchableOpacity, Modal, TouchableWithoutFeedback } from "react-native";
+import { StyleSheet, View, Alert, TouchableOpacity, Modal, TouchableWithoutFeedback, ScrollView } from "react-native";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import SafeView from "../../../../../@ui/safe-view/SafeView";
 import AppHeader from "../../../../../@ui/app-header/AppHeader";
@@ -49,7 +49,11 @@ const UpdatePaymentScreen: FC = () => {
     const today = new Date();
     return today;
   });
-  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [paymentMode, setPaymentMode] = useState<string>("");
+  const [paymentReceiverId, setPaymentReceiverId] = useState<string>("");
+  const [transactionId, setTransactionId] = useState<string>("");
+  const [showDatePicker, setShowDatePicker] = useState(false); // for installment due dates
+  const [statusDatePickerOpen, setStatusDatePickerOpen] = useState(false); // for Update Payment Status modal
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [isUpdating, setIsUpdating] = useState(false);
   const [showReminderMenu, setShowReminderMenu] = useState<string | null>(null);
@@ -62,15 +66,6 @@ const UpdatePaymentScreen: FC = () => {
   
   // Form handler for date inputs
   const dateHandler = useForm();
-  
-  // Initialize form values when dynamicInstallments change
-  useEffect(() => {
-    dynamicInstallments.forEach((inst) => {
-      const fieldName = `installmentAmount${inst.installmentId}`;
-      installmentHandler.setValue(fieldName, inst.duePayment?.toString() || "0");
-    });
-    console.log('🔄 Initialized form values for installments:', dynamicInstallments);
-  }, [dynamicInstallments]);
   
   // Coupon states
   const [availableCoupons, setAvailableCoupons] = useState<CouponOption[]>([
@@ -90,7 +85,7 @@ const UpdatePaymentScreen: FC = () => {
 
   // Set default values for installment amounts
   useMemo(() => {
-    dynamicInstallments.forEach((inst, index) => {
+    dynamicInstallments.forEach((inst: any) => {
       installmentHandler.setValue(`installmentAmount${inst.installmentId}`, inst.duePayment?.toString() || "0");
     });
   }, [dynamicInstallments]);
@@ -276,9 +271,64 @@ const UpdatePaymentScreen: FC = () => {
     setNextInstallmentNumber(dueInstallments.length + 1);
     
     // Set initial form values for existing installments
-    mappedInstallments.forEach((inst) => {
-      const fieldName = `installmentAmount${inst.installmentId}`;
-      installmentHandler.setValue(fieldName, inst.duePayment?.toString() || "0");
+    mappedInstallments.forEach((inst: any) => {
+      // Set amount
+      const amountFieldName = `installmentAmount${inst.installmentId}`;
+      installmentHandler.setValue(amountFieldName, inst.duePayment?.toString() || "0");
+      
+      // Set date - parse the date and set it
+      const dateFieldName = `installmentDate${inst.installmentId}`;
+      if (inst.nextpaymentDate || inst.formatedNextpaymentDate) {
+        let dateValue = inst.formatedNextpaymentDate || inst.nextpaymentDate;
+        
+        // Convert various date formats to Date object
+        if (dateValue) {
+          try {
+            let parsedDate = new Date();
+            
+            // Check if it's already a valid Date string (ISO format YYYY-MM-DD)
+            if (dateValue.match(/^\d{4}-\d{2}-\d{2}/)) {
+              parsedDate = new Date(dateValue);
+            }
+            // Check if it's DD-MM-YYYY format
+            else if (dateValue.includes('-') && dateValue.split('-').length === 3) {
+              const parts = dateValue.split('-');
+              // If first part is 2 digits, it's DD-MM-YYYY
+              if (parts[0].length === 2) {
+                const [day, month, year] = parts;
+                parsedDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+              } else {
+                // Otherwise it might be YYYY-MM-DD
+                parsedDate = new Date(dateValue);
+              }
+            }
+            // Check if it's DD/MM/YYYY format
+            else if (dateValue.includes('/') && dateValue.split('/').length === 3) {
+              const parts = dateValue.split('/');
+              if (parts[0].length === 2) {
+                const [day, month, year] = parts;
+                parsedDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+              } else {
+                const [year, month, day] = parts;
+                parsedDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+              }
+            }
+            // Try standard Date parsing
+            else {
+              parsedDate = new Date(dateValue);
+            }
+            
+            if (!isNaN(parsedDate.getTime())) {
+              dateHandler.setValue(dateFieldName, parsedDate);
+              console.log(`✅ Set date for ${dateFieldName}:`, parsedDate);
+            } else {
+              console.log(`❌ Invalid date for ${dateFieldName}:`, dateValue);
+            }
+          } catch (error) {
+            console.log('Date parsing error in initialization:', error, dateValue);
+          }
+        }
+      }
     });
     
     console.log('Initialized dynamic installments:', {
@@ -286,6 +336,61 @@ const UpdatePaymentScreen: FC = () => {
       mappedInstallments
     });
   }, [installmentDetails]);
+
+  // Sync form values when dynamicInstallments change
+  useEffect(() => {
+    dynamicInstallments.forEach((inst: any) => {
+      // Sync amount
+      const amountFieldName = `installmentAmount${inst.installmentId}`;
+      const currentAmount = installmentHandler.getValues(amountFieldName);
+      const expectedAmount = inst.duePayment?.toString() || "0";
+      if (currentAmount !== expectedAmount) {
+        installmentHandler.setValue(amountFieldName, expectedAmount, { shouldValidate: false });
+      }
+      
+      // Sync date
+      const dateFieldName = `installmentDate${inst.installmentId}`;
+      if (inst.nextpaymentDate || inst.formatedNextpaymentDate) {
+        let dateValue = inst.formatedNextpaymentDate || inst.nextpaymentDate;
+        if (dateValue) {
+          try {
+            let parsedDate = new Date();
+            if (dateValue.match(/^\d{4}-\d{2}-\d{2}/)) {
+              parsedDate = new Date(dateValue);
+            } else if (dateValue.includes('-') && dateValue.split('-').length === 3) {
+              const parts = dateValue.split('-');
+              if (parts[0].length === 2) {
+                const [day, month, year] = parts;
+                parsedDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+              } else {
+                parsedDate = new Date(dateValue);
+              }
+            } else if (dateValue.includes('/') && dateValue.split('/').length === 3) {
+              const parts = dateValue.split('/');
+              if (parts[0].length === 2) {
+                const [day, month, year] = parts;
+                parsedDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+              } else {
+                const [year, month, day] = parts;
+                parsedDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+              }
+            } else {
+              parsedDate = new Date(dateValue);
+            }
+            
+            if (!isNaN(parsedDate.getTime())) {
+              const currentDate = dateHandler.getValues(dateFieldName);
+              if (!currentDate || currentDate.getTime() !== parsedDate.getTime()) {
+                dateHandler.setValue(dateFieldName, parsedDate, { shouldValidate: false });
+              }
+            }
+          } catch (error) {
+            console.log('Date sync error:', error);
+          }
+        }
+      }
+    });
+  }, [dynamicInstallments]);
 
 
   // Get total due amount including paid installments and coupon discount (PaymentDetailsScreen style)
@@ -461,7 +566,18 @@ const UpdatePaymentScreen: FC = () => {
   // Function to recalculate all installment amounts
   const recalculateInstallmentAmounts = () => {
     if (dynamicInstallments.length > 0) {
-      // Use paymentAfterDiscount as base amount (same as PaymentDetailsScreen logic)
+      // If coupon is applied, always recalculate amounts based on paymentAfterDiscount
+      // If no coupon and no dynamic installments, keep original amounts
+      const hasDynamic = dynamicInstallments.some((inst: any) => inst.isDynamic);
+      const hasCoupon = !!selectedCoupon;
+      
+      if (!hasDynamic && !hasCoupon) {
+        // No coupon and no new installments - keep original amounts
+        return dynamicInstallments;
+      }
+
+      // Use paymentAfterDiscount as base amount when coupon is applied
+      // Otherwise use totalDuePayment
       const baseAmount = selectedCoupon ? paymentAfterDiscount : (paymentDetails?.totalDuePayment || 0);
       const { equalAmount, remainder, installmentAmounts } = calculateAndDistributeInstallments(baseAmount, dynamicInstallments.length);
       
@@ -487,6 +603,8 @@ const UpdatePaymentScreen: FC = () => {
         selectedCoupon: selectedCoupon?.couponName,
         discountAmount,
         paymentAfterDiscount,
+        hasCoupon,
+        hasDynamic,
         updatedInstallments
       });
       
@@ -521,6 +639,9 @@ const UpdatePaymentScreen: FC = () => {
   const handleEditInstallment = (installment: any) => {
     setSelectedInstallment(installment);
     setPaymentStatus(installment.paymentStatus || "paid");
+    setPaymentMode(installment.paymentMode || "");
+    setPaymentReceiverId(installment.paymentRecieverId || installment.paymentReceiverId || "");
+    setTransactionId(installment.transactionId || "");
     
     // Safely parse the payment date
     let initialDate = new Date();
@@ -575,7 +696,10 @@ const UpdatePaymentScreen: FC = () => {
         courseId: course.courseId,
         updatedPaymentStatus: paymentStatus,
         updatedDate: paymentDate.toLocaleDateString("en-GB").split("/").reverse().join("-"),
-        installmentNumber: selectedInstallment.installmentNumber
+        installmentNumber: selectedInstallment.installmentNumber,
+        ...(paymentMode && { paymentMode: paymentMode }),
+        ...(paymentMode === "cash" && paymentReceiverId && { paymentRecieverId: paymentReceiverId }),
+        ...(paymentMode === "online" && transactionId && { transactionId })
       };
 
       console.log("Updating payment status with payload:", payload);
@@ -614,6 +738,9 @@ const UpdatePaymentScreen: FC = () => {
   const handleCloseModal = () => {
     setModalVisible(false);
     setSelectedInstallment(null);
+    setPaymentMode("");
+    setPaymentReceiverId("");
+    setTransactionId("");
   };
 
   const handleDownloadInvoice = (installmentId: string) => {
@@ -858,55 +985,65 @@ const UpdatePaymentScreen: FC = () => {
 
           {/* Conditional Content Based on Active Tab */}
           {activeTab === "installment" ? (
-            // Installment Details Table - Original UI
+            // Installment Details Table - scrollable + wider layout
             <Flex mt={15}>
-              <Grid>
-                <Row style={styles.headerRow}>
-                  <Col size={8}>
-                    <ScalableText fontFamily="SemiBold" style={styles.headerText}>
-                      NO.
-                    </ScalableText>
-                  </Col>
-                  <Col size={18}>
-                    <ScalableText fontFamily="SemiBold" style={styles.headerText}>
-                      DATE
-                    </ScalableText>
-                  </Col>
-                  <Col size={22}>
-                    <ScalableText fontFamily="SemiBold" style={styles.headerText}>
-                      AMOUNT
-                    </ScalableText>
-                  </Col>
-                  <Col size={18}>
-                    <ScalableText fontFamily="SemiBold" style={styles.headerText}>
-                      STATUS
-                    </ScalableText>
-                  </Col>
-                  <Col size={8}>
-                    <ScalableText fontFamily="SemiBold" style={styles.headerText}>
-                      INVOICE
-                    </ScalableText>
-                  </Col>
-                  <Col size={8}>
-                    <ScalableText fontFamily="SemiBold" style={styles.headerText}>
-                      REMINDER
-                    </ScalableText>
-                  </Col>
-                  <Col size={8}>
-                    <ScalableText fontFamily="SemiBold" style={styles.headerText}>
-                      EDIT
-                    </ScalableText>
-                  </Col>
-                  <Col size={10}>
-                    <ScalableText fontFamily="SemiBold" style={styles.headerText}>
-                      DOWNLOAD
-                    </ScalableText>
-                  </Col>
-                </Row>
-                
-                {/* Dynamic Table Data */}
-                {installmentDetails.length > 0 ? (
-                  installmentDetails.map((installment: any, index: number) => {
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+              >
+                <View style={styles.installmentTableWrapper}>
+                  <Grid>
+                    <Row style={styles.headerRow}>
+                      <Col  style={{ alignItems: 'center', justifyContent: 'center',width: "4%" }}>
+                        <ScalableText fontFamily="SemiBold" style={styles.headerText}>
+                          NO.
+                        </ScalableText>
+                      </Col>
+                      <Col  style={{ alignItems: 'center', justifyContent: 'center', }}>
+                        <ScalableText fontFamily="SemiBold" style={styles.headerText}>
+                          DATE
+                        </ScalableText>
+                      </Col>
+                      <Col  style={{ alignItems: 'center', justifyContent: 'center', }}>
+                        <ScalableText fontFamily="SemiBold" style={styles.headerText}>
+                          AMOUNT
+                        </ScalableText>
+                      </Col>
+                      <Col  style={{ alignItems: 'center', justifyContent: 'center', }}>
+                        <ScalableText fontFamily="SemiBold" style={styles.headerText}>
+                          MODE
+                        </ScalableText>
+                      </Col>
+                      <Col  style={{ alignItems: 'center', justifyContent: 'center',width: "15%" }}>
+                        <ScalableText fontFamily="SemiBold" style={styles.headerText}>
+                          STATUS
+                        </ScalableText>
+                      </Col>
+                      <Col  style={{ alignItems: 'center', justifyContent: 'center',width: "8%" }}>
+                        <ScalableText fontFamily="SemiBold" style={styles.headerText}>
+                          INVOICE
+                        </ScalableText>
+                      </Col>
+                      <Col  style={{ alignItems: 'center', justifyContent: 'center',width: "8%" }}>
+                        <ScalableText fontFamily="SemiBold" style={styles.headerText}>
+                          REMINDER
+                        </ScalableText>
+                      </Col>
+                      <Col  style={{ alignItems: 'center', justifyContent: 'center',width: "8%" }}>
+                        <ScalableText fontFamily="SemiBold" style={styles.headerText}>
+                          EDIT
+                        </ScalableText>
+                      </Col>
+                      <Col style={{ alignItems: 'center', justifyContent: 'center',width: "10%" }}>
+                        <ScalableText fontFamily="SemiBold" style={styles.headerText}>
+                          DOWNLOAD
+                        </ScalableText>
+                      </Col>
+                    </Row>
+                    
+                    {/* Dynamic Table Data */}
+                    {installmentDetails.length > 0 ? (
+                      installmentDetails.map((installment: any, index: number) => {
                     console.log("Rendering installment:", installment);
                     console.log("Installment payment status:", installment.paymentStatus);
                     console.log("Available date fields:", {
@@ -921,12 +1058,12 @@ const UpdatePaymentScreen: FC = () => {
                     const statusStyle = getStatusColor(installment.paymentStatus);
                     return (
                       <Row key={installment.installmentId} style={styles.dataRow}>
-                        <Col size={8}>
+                        <Col size={8} style={{ alignItems: 'center', justifyContent: 'center' }}>
                           <ScalableText style={styles.dataText} fontFamily="Regular">
                             {installment.installmentNumber}
                           </ScalableText>
                         </Col>
-                        <Col size={18}>
+                        <Col size={10} style={{ alignItems: 'center', justifyContent: 'center' }}>
                           <ScalableText style={styles.dataText} fontFamily="Regular">
                             {(() => {
                               // For paid installments, show payment received date
@@ -944,12 +1081,17 @@ const UpdatePaymentScreen: FC = () => {
                             })()}
                           </ScalableText>
                         </Col>
-                        <Col size={22}>
+                        <Col size={15} style={{ alignItems: 'center', justifyContent: 'center' }}>
                           <ScalableText style={styles.dataText} fontFamily="Regular">
                             {formatCurrency(installment.receivedPayment || installment.duePayment)}
                           </ScalableText>
                         </Col>
-                        <Col size={18}>
+                        <Col size={16} style={{ alignItems: 'center', justifyContent: 'center' }}>
+                          <ScalableText style={styles.dataText} fontFamily="Regular">
+                            {(installment.paymentMode || '').toString().toUpperCase() || '-'}
+                          </ScalableText>
+                        </Col>
+                        <Col size={18} style={{ alignItems: 'center', justifyContent: 'center' }}>
                           <Flex
                             styles={{
                               ...styles.statusChip,
@@ -967,14 +1109,14 @@ const UpdatePaymentScreen: FC = () => {
                             </ScalableText>
                           </Flex>
                         </Col>
-                        <Col size={8}>
+                        <Col size={8} style={{ alignItems: 'center', justifyContent: 'center' }}>
                           <Flex flexDirection="row" justify="center" align="center">
                             <TouchableOpacity onPress={() => handleViewInvoice(installment.installmentId)}>
                               <AutoHeightImage source={IMAGES.fileSearchIcon} width={16} />
                             </TouchableOpacity>
                           </Flex>
                         </Col>
-                        <Col size={8}>
+                        <Col size={8} style={{ alignItems: 'center', justifyContent: 'center' }}>
                           <Flex flexDirection="row" justify="center" align="center" styles={{ position: 'relative' }}>
                             <TouchableOpacity 
                               onPress={() => handleReminderMenu(installment.installmentId)}
@@ -1016,14 +1158,14 @@ const UpdatePaymentScreen: FC = () => {
                             )}
                           </Flex>
                         </Col>
-                        <Col size={8}>
+                        <Col size={8} style={{ alignItems: 'center', justifyContent: 'center' }}>
                           <Flex flexDirection="row" justify="center" align="center">
                             <TouchableOpacity onPress={() => handleEditInstallment(installment)}>
                               <AutoHeightImage source={IMAGES.editIcon} width={16} />
                             </TouchableOpacity>
                           </Flex>
                         </Col>
-                        <Col size={10}>
+                        <Col size={10} style={{ alignItems: 'center', justifyContent: 'center' }}>
                           <Flex flexDirection="row" justify="center" align="center">
                             <TouchableOpacity onPress={() => handleDownloadInvoice(installment.installmentId)}>
                               <AutoHeightImage source={IMAGES.downloadIcon} width={16} />
@@ -1042,7 +1184,9 @@ const UpdatePaymentScreen: FC = () => {
                     </Col>
                   </Row>
                 )}
-              </Grid>
+                  </Grid>
+                </View>
+              </ScrollView>
             </Flex>
           ) : (
             // Update Installments Form - Matching PaymentDetailsScreen UI
@@ -1181,7 +1325,11 @@ const UpdatePaymentScreen: FC = () => {
                         label="Select coupon"
                         onChange={(value) => handleCouponSelection(value)}
                         options={couponsLoading ? [{ label: 'Loading...', value: '' }] : availableCoupons}
-                        value={availableCoupons.find((opt: CouponOption) => opt.value === (selectedCoupon?.couponId || ''))}
+                        value={
+                          availableCoupons.find(
+                            (opt: CouponOption) => opt.value === (selectedCoupon?.couponId || '')
+                          ) as any
+                        }
                         dropdownButtonStyle={styles.couponDropdownStyle}
                       />
                     )}
@@ -1227,7 +1375,14 @@ const UpdatePaymentScreen: FC = () => {
                       { label: 'Paid', value: 'paid' },
                       { label: 'Due', value: 'due' }
                     ]}
-                    value={isPayingFirstInstallment ? { label: isPayingFirstInstallment === 'paid' ? 'Paid' : 'Due', value: isPayingFirstInstallment } : undefined}
+                    value={
+                      isPayingFirstInstallment
+                        ? ({
+                            label: isPayingFirstInstallment === 'paid' ? 'Paid' : 'Due',
+                            value: isPayingFirstInstallment,
+                          } as any)
+                        : (undefined as any)
+                    }
                     dropdownButtonStyle={styles.couponDropdownStyle}
                   />
                 </View>
@@ -1253,10 +1408,15 @@ const UpdatePaymentScreen: FC = () => {
                           setDynamicInstallments(updatedInstallments);
                         }}
                       >
-                        <ScalableText style={[
-                          styles.paymentModeButtonText,
-                          dynamicInstallments[0]?.paymentMode === 'cash' && styles.paymentModeButtonTextActive
-                        ]} fontFamily="Medium">
+                        <ScalableText
+                          style={{
+                            ...styles.paymentModeButtonText,
+                            ...(dynamicInstallments[0]?.paymentMode === 'cash'
+                              ? styles.paymentModeButtonTextActive
+                              : {}),
+                          }}
+                          fontFamily="Medium"
+                        >
                           Cash
                         </ScalableText>
                       </TouchableOpacity>
@@ -1273,10 +1433,15 @@ const UpdatePaymentScreen: FC = () => {
                           setDynamicInstallments(updatedInstallments);
                         }}
                       >
-                        <ScalableText style={[
-                          styles.paymentModeButtonText,
-                          dynamicInstallments[0]?.paymentMode === 'online' && styles.paymentModeButtonTextActive
-                        ]} fontFamily="Medium">
+                        <ScalableText
+                          style={{
+                            ...styles.paymentModeButtonText,
+                            ...(dynamicInstallments[0]?.paymentMode === 'online'
+                              ? styles.paymentModeButtonTextActive
+                              : {}),
+                          }}
+                          fontFamily="Medium"
+                        >
                           Online
                         </ScalableText>
                       </TouchableOpacity>
@@ -1358,7 +1523,7 @@ const UpdatePaymentScreen: FC = () => {
                             name={`installmentDate${dueInst.installmentId}`}
                             label="Select due date"
                             inputRoot={styles.dateInputStyle}
-                            defaultValue={dueInst.nextpaymentDate || dueInst.formatedNextpaymentDate}
+                            minimumDate={new Date()}
                           />
                         </View>
                       </View>
@@ -1374,7 +1539,6 @@ const UpdatePaymentScreen: FC = () => {
                           keyboardType="numeric"
                           containerStyles={styles.inputContainer}
                           placeholder="Enter amount"
-                          value={dueInst.duePayment?.toString() || "0"}
                           onChangeText={(text) => {
                             // Update the installment amount in state
                             const newAmount = parseFloat(text) || 0;
@@ -1503,31 +1667,62 @@ const UpdatePaymentScreen: FC = () => {
               <ScalableText style={styles.modalTitle} fontFamily="Bold">
                 Update Payment Status
               </ScalableText>
-              <TouchableOpacity onPress={handleCloseModal} style={styles.modalCloseButton}>
-                <ScalableText style={styles.closeIcon} fontFamily="Bold">×</ScalableText>
+              <TouchableOpacity 
+                onPress={handleCloseModal} 
+                style={styles.modalCloseButton}
+                activeOpacity={0.7}
+              >
+                <View style={styles.closeIconContainer}>
+                  <ScalableText style={styles.closeIcon} fontFamily="Bold">×</ScalableText>
+                </View>
               </TouchableOpacity>
             </Flex>
 
-            {/* Current Payment Details */}
-            <Flex mb={25} styles={styles.paymentDetailsCard}>
-              <ScalableText style={styles.modalSubtitle} fontFamily="Medium">
-                Current Payment Details:
-              </ScalableText>
-              <Flex flexDirection="row" align="center" >
-                <ScalableText style={styles.paymentAmount} fontFamily="Bold">
-                  {formatCurrency(selectedInstallment?.receivedPayment || selectedInstallment?.duePayment || 0)}
-                </ScalableText>
-              
-              </Flex>
-              
-            </Flex>
-            <Flex >
+            {/* Current Payment Details - Single line format (web-style) */}
+            <View style={styles.currentPaymentDetailContainer}>
+              <Flex flexDirection="row" align="center" justify="space-between">
+                <Flex flexDirection="row" align="center" styles={{ flexWrap: 'wrap', flex: 1 }}>
+                  {/* Date section */}
+                  <Flex flexDirection="row" align="center" mr={16}>
+                    <ScalableText style={styles.currentPaymentValue} fontFamily="Regular">
+                      {(() => {
+                        if (!selectedInstallment) return "-";
+                        if (selectedInstallment.paymentStatus?.toLowerCase() === "paid") {
+                          return formatDate(
+                            selectedInstallment.paymentReceiveDate ||
+                              selectedInstallment.paidDate ||
+                              selectedInstallment.receivedDate ||
+                              selectedInstallment.paymentDate
+                          );
+                        }
+                        return formatDate(
+                          selectedInstallment.nextpaymentDate ||
+                            selectedInstallment.formatedNextpaymentDate
+                        );
+                      })()}
+                    </ScalableText>
+                  </Flex>
+
+                  {/* Amount section */}
+                  <Flex flexDirection="row" align="center">
+                    <ScalableText style={styles.currentPaymentAmountValue} fontFamily="Bold">
+                      {formatCurrency(
+                        selectedInstallment?.receivedPayment ||
+                          selectedInstallment?.duePayment ||
+                          0
+                      )}
+                    </ScalableText>
+                  </Flex>
+                </Flex>
+
+                {/* Status chip on right */}
+                {selectedInstallment && (
                   <Flex
                     styles={{
                       ...styles.statusChip,
                       backgroundColor: getStatusColor(selectedInstallment?.paymentStatus).backgroundColor,
                     }}
-                  >
+                    >
                     <ScalableText
                       style={{
                         ...styles.statusChipText,
@@ -1538,11 +1733,17 @@ const UpdatePaymentScreen: FC = () => {
                       {selectedInstallment?.paymentStatus?.toUpperCase()}
                     </ScalableText>
                   </Flex>
-                </Flex>
+                )}
+              </Flex>
+            </View>
 
-            {/* Status Dropdown */}
-        
-              <Flex mt={8}>
+            {/* Form row: Status + Date (side by side) */}
+            <View style={styles.formRowContainer}>
+              {/* Status field */}
+              <View style={styles.formFieldHalf}>
+                <ScalableText style={styles.inputLabel} fontFamily="Medium">
+                  Status *
+                </ScalableText>
                 <SelectDropdown
                   label=""
                   onChange={(value) => setPaymentStatus(value)}
@@ -1550,27 +1751,127 @@ const UpdatePaymentScreen: FC = () => {
                     { label: "Paid", value: "paid" },
                     { label: "Due", value: "due" },
                   ]}
-                  value={{ label: paymentStatus.charAt(0).toUpperCase() + paymentStatus.slice(1), value: paymentStatus }}
+                  value={{
+                    label:
+                      paymentStatus.charAt(0).toUpperCase() + paymentStatus.slice(1),
+                    value: paymentStatus,
+                  }}
+                  dropdownButtonStyle={styles.modalDropdownStyle}
                 />
-              </Flex>
-        
+              </View>
 
-            {/* Date Input */}
-           
-              <TouchableOpacity 
-                style={styles.dateInput}
-                onPress={() => setShowDatePicker(true)}
-              >
-                <Flex flexDirection="row" align="center" justify="space-between">
-                  <ScalableText style={styles.dateInputText} fontFamily="Regular">
-                    {paymentDate.toLocaleDateString("en-GB")}
+              {/* Date field */}
+              <View style={styles.formFieldHalf}>
+                <ScalableText style={styles.inputLabel} fontFamily="Medium">
+                  Date *
+                </ScalableText>
+                <TouchableOpacity
+                  style={styles.dateInput}
+                  onPress={() => setStatusDatePickerOpen(true)}
+                 >  
+                  <Flex flexDirection="row" align="center" justify="space-between">
+                    <ScalableText style={styles.dateInputText} fontFamily="Regular">
+                      {paymentDate.toLocaleDateString("en-GB")}
+                    </ScalableText>
+                    <ScalableText style={styles.calendarIcon} fontFamily="Regular">
+                      📅
+                    </ScalableText>
+                  </Flex>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* Mode of payment for this installment */}
+            <View style={styles.paymentModeSection}>
+              <ScalableText style={styles.inputLabel} fontFamily="Medium">
+                Mode of payment for this installment
+              </ScalableText>
+              <View style={styles.paymentModeContainer}>
+                <TouchableOpacity
+                  style={[
+                    styles.paymentModeButton,
+                    paymentMode === 'cash' && styles.paymentModeButtonActive
+                  ]}
+                  onPress={() => setPaymentMode('cash')}
+                >
+                  <ScalableText 
+                    style={paymentMode === 'cash' 
+                      ? styles.paymentModeButtonTextActive 
+                      : styles.paymentModeButtonText
+                    } 
+                    fontFamily="Medium"
+                  >
+                    Cash
                   </ScalableText>
-                  <ScalableText style={styles.calendarIcon} fontFamily="Regular">
-                    📅
+                </TouchableOpacity>
+                
+                <TouchableOpacity
+                  style={[
+                    styles.paymentModeButton,
+                    paymentMode === 'online' && styles.paymentModeButtonActive
+                  ]}
+                  onPress={() => setPaymentMode('online')}
+                >
+                  <ScalableText 
+                    style={paymentMode === 'online' 
+                      ? styles.paymentModeButtonTextActive 
+                      : styles.paymentModeButtonText
+                    } 
+                    fontFamily="Medium"
+                  >
+                    Online
                   </ScalableText>
-                </Flex>
-              </TouchableOpacity>
-          
+                </TouchableOpacity>
+              </View>
+
+              {/* Extra fields for selected payment mode - fixed height container to avoid jumping */}
+              <View style={styles.paymentModeExtraContainer}>
+                {/* Payment Received By - only for cash */}
+                {paymentMode === 'cash' && (
+                  <View style={styles.modalFieldSpacing}>
+                    <ScalableText style={styles.inputLabel} fontFamily="Medium">
+                      Payment received by
+                    </ScalableText>
+                    <SelectDropdown
+                      label="Select employee"
+                      onChange={(value) => setPaymentReceiverId(value)}
+                      options={employeesLoading ? [{ label: 'Loading employees...', value: '' }] : availableEmployees}
+                      value={availableEmployees.find(emp => emp.value === paymentReceiverId) as any}
+                      dropdownButtonStyle={styles.modalDropdownStyle}
+                    />
+                  </View>
+                )}
+
+                {/* Transaction ID - only for online */}
+                {paymentMode === 'online' && (
+                  <View style={styles.modalFieldSpacing}>
+                    <ScalableText style={styles.inputLabel} fontFamily="Medium">
+                      Transaction ID
+                    </ScalableText>
+                    <View style={styles.transactionIdInputWrapper}>
+                      <Input
+                        handler={installmentHandler}
+                        name="modalTransactionId"
+                        label=""
+                        containerStyles={styles.transactionIdInputContainer}
+                        placeholder="Enter transaction ID"
+                        value={transactionId}
+                        onChangeText={(text) => setTransactionId(text)}
+                      />
+                    </View>
+                  </View>
+                )}
+              </View>
+            </View>
+
+            {/* Note text */}
+            <View style={styles.noteContainer}>
+              <ScalableText style={styles.modalNote} fontFamily="Regular">
+                Note: If you change the status of this installment from Paid to Due, the
+                payment mode, transaction details and payment receiver details will also
+                be removed.
+              </ScalableText>
+            </View>
 
             {/* Save Button */}
             <Button
@@ -1583,6 +1884,21 @@ const UpdatePaymentScreen: FC = () => {
           </View>
         </View>
       </Modal>
+
+      {/* Status Date Picker (for Update Payment Status modal) */}
+      <DatePicker
+        modal
+        open={statusDatePickerOpen}
+        mode="date"
+        date={paymentDate || new Date()}
+        onConfirm={(date) => {
+          setStatusDatePickerOpen(false);
+          if (date && !isNaN(date.getTime())) {
+            setPaymentDate(date);
+          }
+        }}
+        onCancel={() => setStatusDatePickerOpen(false)}
+      />
 
       {/* Date Picker Modal */}
       <Modal
@@ -1732,15 +2048,20 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderColor: "#E8E8E8",
     paddingVertical: 12,
-    paddingHorizontal: 8,
+    paddingHorizontal: 20,
     borderRadius: 8,
     marginBottom: 8,
+    
+  },
+  installmentTableWrapper: {
+    minWidth: 900, // wider table so columns have more space
   },
   headerText: {
     color: COLORS.textSecondary,
     fontSize: 9,
     textAlign: "center",
     fontWeight: "600",
+   
   },
   dataRow: {
     backgroundColor: COLORS.white,
@@ -1796,9 +2117,9 @@ const styles = StyleSheet.create({
   modalContainer: {
     backgroundColor: COLORS.white,
     borderRadius: 16,
-    padding: 24,
-    width: "85%",
-    maxWidth: 400,
+    padding: 20,
+    width: "90%",
+    maxWidth: 500,
     shadowColor: "#000",
     shadowOffset: {
       width: 0,
@@ -1818,11 +2139,20 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
     fontFamily: "Poppins-Medium",
   },
+  currentLabel: {
+    fontSize: 11,
+    color: COLORS.textSecondary,
+    marginBottom: 2,
+  },
+  currentValue: {
+    fontSize: 13,
+    color: COLORS.black,
+  },
   paymentAmount: {
-    fontSize: 12,
+    fontSize: 14,
     color: COLORS.primary,
     fontFamily: "Poppins-Bold",
-    marginHorizontal: 10,
+    marginTop: 2,
   },
   inputLabel: {
     fontSize: 15,
@@ -1851,10 +2181,18 @@ const styles = StyleSheet.create({
     color: COLORS.white,
     fontFamily: "Poppins-SemiBold",
   },
+  closeIconContainer: {
+    width: '100%',
+    height: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   closeIcon: {
-    fontSize: 24,
+    fontSize: 28,
     color: COLORS.textSecondary,
     fontFamily: "Poppins-Bold",
+    lineHeight: 28,
+    textAlign: 'center',
   },
   dateInput: {
     backgroundColor: COLORS.white,
@@ -1865,6 +2203,7 @@ const styles = StyleSheet.create({
     borderColor: "#E8E8E8",
     width: "100%",
     marginTop: 8,
+    minHeight: 48,
   },
   dateInputText: {
     fontSize: 14,
@@ -1883,17 +2222,82 @@ const styles = StyleSheet.create({
     borderLeftColor: COLORS.primary,
   },
   modalCloseButton: {
-    padding: 8,
     borderRadius: 20,
     backgroundColor: "#F5F5F5",
-    width: 36,
-    height: 36,
+    width: 32,
+    height: 32,
     alignItems: "center",
     justifyContent: "center",
+    overflow: 'hidden',
   },
   saveButtonDisabled: {
     backgroundColor: COLORS.textSecondary,
     opacity: 0.7,
+  },
+  modalNote: {
+    fontSize: 11,
+    color: COLORS.textSecondary,
+    fontFamily: "Poppins-Regular",
+    lineHeight: 16,
+  },
+  currentPaymentDetailContainer: {
+    backgroundColor: "#F8F9FA",
+    borderRadius: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderWidth: 1,
+    borderColor: "#E8E8E8",
+    marginBottom: 20,
+  },
+  currentPaymentLabel: {
+    fontSize: 14,
+    color: COLORS.textSecondary,
+    fontFamily: "Poppins-Medium",
+    marginRight: 8,
+  },
+  currentPaymentValue: {
+    fontSize: 14,
+    color: COLORS.black,
+    fontFamily: "Poppins-Regular",
+  },
+  currentPaymentAmountValue: {
+    fontSize: 14,
+    color: COLORS.primary,
+    fontFamily: "Poppins-Bold",
+  },
+  formRowContainer: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: 10,
+    gap: 12,
+  },
+  formFieldHalf: {
+    flex: 1,
+  },
+  modalDropdownStyle: {
+    backgroundColor: COLORS.white,
+    borderRadius: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderWidth: 1,
+    borderColor: "#E8E8E8",
+    marginTop: 8,
+  },
+  modalFieldSpacing: {
+    marginTop: 8,
+  },
+  paymentModeExtraContainer: {
+    marginTop: 12,
+    minHeight: 110, // enough space for either dropdown or input, keeps modal position stable
+  },
+  noteContainer: {
+    backgroundColor: "#F8F9FA",
+    borderRadius: 8,
+    padding: 12,
+    marginTop: 18,
+    marginBottom: 16,
+    borderLeftWidth: 3,
+    borderLeftColor: "#FFA500",
   },
   updateFormText: {
     color: COLORS.textSecondary,
@@ -2077,6 +2481,10 @@ const styles = StyleSheet.create({
   submitButtonDisabled: {
     backgroundColor: COLORS.textSecondary,
     opacity: 0.7,
+  },
+  paymentModeSection: {
+    marginTop: 20,
+    marginBottom: 10,
   },
   paymentModeContainer: {
     flexDirection: "row",
@@ -2268,6 +2676,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     borderWidth: 1,
     borderColor: "#E8E8E8",
+  },
+  transactionIdInputWrapper: {
+    marginTop: 8,
+  },
+  transactionIdInputContainer: {
+    backgroundColor: COLORS.white,
+    borderRadius: 10,
+    borderWidth: 0,
+    elevation: 0,
+    shadowOpacity: 0,
   },
   dateInputStyle: {
     marginTop: 0,
