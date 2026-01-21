@@ -1,4 +1,3 @@
-
 import React, { useRef, useState, useMemo } from "react";
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Modal, Alert } from "react-native";
 import { COLORS } from "../../../../colors";
@@ -422,4 +421,3 @@ const TimetableHeader = ({
 };
 
 export default TimetableHeader;
-

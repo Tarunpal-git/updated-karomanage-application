@@ -1,5 +1,3 @@
-
-
 import React, { useEffect, useMemo, useState } from "react";
 import { View, Alert, Text } from "react-native";
 import { useSelector } from "react-redux";

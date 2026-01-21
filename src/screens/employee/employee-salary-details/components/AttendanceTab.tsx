@@ -25,6 +25,7 @@ type AttendanceEntry = {
 const AttendanceTab = ({ employeeId }) => {
   const today = dayjs();
   const [currentMonth, setCurrentMonth] = useState(today);
+  console.log("👤 employeeId in AttendanceTab:", employeeId);
  
   const month = currentMonth.format("MM");
   const year = currentMonth.format("YYYY");
@@ -36,6 +37,7 @@ const AttendanceTab = ({ employeeId }) => {
       month,
       year,
     });
+    console.log("📦 Attendance API response data:", data);
  
   // ===============================
   // 🔹 API → MAP (day → status + interval)
@@ -128,8 +130,11 @@ const AttendanceTab = ({ employeeId }) => {
  
           {/* ===== MONTH HEADER ===== */}
           <View style={styles.monthHeader}>
+
             <TouchableOpacity
               onPress={() =>
+                
+                
                 setCurrentMonth(currentMonth.subtract(1, "month"))
               }
               style={styles.arrow}

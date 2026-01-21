@@ -152,60 +152,66 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.5)",
     justifyContent: "center",
     alignItems: "center",
+    padding: 20,  // ✅ ADD KARO
   },
   modalCard: {
-    width: "90%",
-    maxHeight: "80%",
+    width: "95%",  // ✅ 90% se 95% karo
+    height: "85%",  // ✅ maxHeight se height karo
     backgroundColor: "#fff",
     borderRadius: 12,
-    padding: 16,
+    padding: 20,  // ✅ 16 se 20 karo
   },
   modalHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "center",
+    alignItems: "flex-start",  // ✅ center se flex-start karo
     marginBottom: 16,
     paddingBottom: 12,
     borderBottomWidth: 1,
     borderBottomColor: "#e0e0e0",
   },
   modalTitle: {
-    fontSize: 16,
+    fontSize: 18,  // ✅ 16 se 18 karo
     fontWeight: "bold",
     color: "#000",
     flex: 1,
-    paddingRight: 8,
+    paddingRight: 12,  // ✅ 8 se 12 karo
+    lineHeight: 24,  // ✅ ADD KARO
   },
   closeButton: {
-    fontSize: 24,
+    fontSize: 28,  // ✅ 24 se 28 karo
     color: "#000",
     fontWeight: "bold",
+    paddingLeft: 8,  // ✅ ADD KARO
   },
   scrollContent: {
     flex: 1,
+    paddingRight: 8,  // ✅ ADD KARO for better scrolling
   },
   sectionTitle: {
-    fontSize: 15,
+    fontSize: 16,  // ✅ 15 se 16 karo
     fontWeight: "600",
     color: "#000",
-    marginTop: 12,
+    marginTop: 16,  // ✅ 12 se 16 karo
     marginBottom: 8,
   },
   bulletList: {
-    marginBottom: 8,
+    marginBottom: 12,  // ✅ 8 se 12 karo
   },
   bulletText: {
     fontSize: 14,
     color: "#333",
-    lineHeight: 20,
-    marginBottom: 6,
+    lineHeight: 22,  // ✅ 20 se 22 karo
+    marginBottom: 8,  // ✅ 6 se 8 karo
+    paddingLeft: 4,  // ✅ ADD KARO
   },
   footerText: {
     fontSize: 14,
     color: "#333",
-    lineHeight: 20,
+    lineHeight: 22,  // ✅ 20 se 22 karo
     marginTop: 16,
-    marginBottom: 20,
+    marginBottom: 24,  // ✅ 20 se 24 karo
+    fontWeight: "500",  // ✅ ADD KARO
   },
 });
  
