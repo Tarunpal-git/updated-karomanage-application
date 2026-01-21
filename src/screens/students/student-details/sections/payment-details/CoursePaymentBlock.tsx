@@ -1,6 +1,9 @@
-import { StyleSheet, TouchableOpacity, Alert, View, TouchableWithoutFeedback, Modal, TextInput } from "react-native";
-import React, { FC, memo, useState } from "react";
+import { StyleSheet, TouchableOpacity, Alert, View, TouchableWithoutFeedback, Modal, TextInput, Dimensions } from "react-native";
+import React, { FC, memo, useState, useRef } from "react";
+import DatePicker from "react-native-date-picker";
 import { useNavigation } from "@react-navigation/native";
+import { useSelector } from "react-redux";
+import { useQueryClient } from "@tanstack/react-query";
 import Flex from "../../../../../@ui/flex/Flex";
 import ScalableText from "../../../../../@ui/scalable-text/ScalableText";
 
@@ -9,14 +12,21 @@ import { COLORS } from "../../../../../colors";
 import { useCourseDetailsQuery } from "../../../../../apis/hooks/course/query/useCourseDetails.query";
 import { THomeStackNavigator } from "../../../../../navigators/tab-navigator/sub-stack-navigator/HomeStackNavigator";
 import { hasUpdatePermission } from "../../../../../utils/fetchPermissionsTitle";
+import { RootState } from "../../../../../app/store";
+import { request } from "../../../../../services/axios.service";
+import { apiUrls } from "../../../../../apis/urls";
 
 interface ICoursePaymentBlock {
   course: TCourse;
   studentRollNo: string;
+  isDefaulter?: boolean;
 }
 
-const CoursePaymentBlock: FC<ICoursePaymentBlock> = ({ course, studentRollNo }) => {
+const CoursePaymentBlock: FC<ICoursePaymentBlock> = ({ course, studentRollNo, isDefaulter }) => {
   const navigation = useNavigation<THomeStackNavigator>();
+  const queryClient = useQueryClient();
+  const authUser = useSelector((state: RootState) => state.auth.authUser);
+  const selectedOrganization = useSelector((state: RootState) => state.auth.selectedOrganization);
   const { data } = useCourseDetailsQuery({
     courseId: course.courseId,
   });
@@ -26,10 +36,56 @@ const CoursePaymentBlock: FC<ICoursePaymentBlock> = ({ course, studentRollNo }) 
   const [refundAmount, setRefundAmount] = useState("");
   const [refundDate, setRefundDate] = useState("");
   const [refundNote, setRefundNote] = useState("");
+  const [refundDatePickerOpen, setRefundDatePickerOpen] = useState(false);
+  const [refundDateObj, setRefundDateObj] = useState<Date>(new Date());
+  const [isSavingRefund, setIsSavingRefund] = useState(false);
+  const menuButtonRef = useRef<View>(null);
+  const [menuPosition, setMenuPosition] = useState({ x: 0, y: 0 });
 
   // Calculate the received payment as totalReceivedPayment - refundAmount
   const calculatedReceivedPayment =
-    (paymentDetails?.totalReceivedPayment || 0) - (paymentDetails?.refundAmount || 0);
+  (paymentDetails?.totalReceivedPayment || 0) - (paymentDetails?.refundAmount || 0);
+
+  // Derived disabled flags for menu actions
+  const isUpdateDisabled = !!isDefaulter;
+
+  // Refund button should be enabled WHEN:
+  // - There is some received payment left for this course (after previous refunds)
+  // - AND student is not defaulter
+  const hasReceivedPayment = calculatedReceivedPayment > 0;
+  const isRefundDisabled = !hasReceivedPayment || !!isDefaulter;
+
+  const formatDateDisplay = (dateVal?: Date) => {
+    if (!dateVal) return "";
+    try {
+      return dateVal.toLocaleDateString("en-GB");
+    } catch {
+      return "";
+    }
+  };
+
+  const formatDateForApi = (dateVal?: Date) => {
+    if (!dateVal) return "";
+    const parsedDate = new Date(dateVal);
+    if (isNaN(parsedDate.getTime())) return "";
+    const day = String(parsedDate.getDate()).padStart(2, "0");
+    const month = String(parsedDate.getMonth() + 1).padStart(2, "0");
+    const year = parsedDate.getFullYear();
+    return `${day}-${month}-${year}`;
+  };
+
+  // Debug logging
+  React.useEffect(() => {
+    console.log('🔍 CoursePaymentBlock Debug:', {
+      courseId: course.courseId,
+      totalReceivedPayment: paymentDetails?.totalReceivedPayment,
+      refundAmount: paymentDetails?.refundAmount,
+      calculatedReceivedPayment,
+      hasReceivedPayment,
+      isDefaulter,
+      isRefundDisabled,
+    });
+  }, [calculatedReceivedPayment, hasReceivedPayment, isDefaulter, isRefundDisabled]);
 
   // Calculate GST based on payment status and installments with dynamic GST type
   const calculateGST = () => {
@@ -148,21 +204,67 @@ const CoursePaymentBlock: FC<ICoursePaymentBlock> = ({ course, studentRollNo }) 
 
   const gstData = calculateGST();
 
-  const handleMenuPress = (event: any) => {
-    event.stopPropagation();
-    setShowMenu(!showMenu);
+  const handleMenuPress = () => {
+    if (menuButtonRef.current) {
+      menuButtonRef.current.measureInWindow((x, y, width, height) => {
+        // Validate that all values are valid numbers
+        if (typeof x === 'number' && typeof y === 'number' && typeof width === 'number' && typeof height === 'number' &&
+            !isNaN(x) && !isNaN(y) && !isNaN(width) && !isNaN(height) &&
+            x >= 0 && y >= 0 && width > 0 && height > 0) {
+          // Calculate position: dropdown should align right edge with button right edge
+          // x + width = right edge of button
+          // Screen width - button right edge = right position from screen edge
+          const screenWidth = Dimensions.get('window').width;
+          const dropdownWidth = 120;
+          const buttonRightEdge = x + width;
+          const rightPosition = screenWidth - buttonRightEdge;
+          
+          // Position above button: y - dropdown height (approx 90px for 2 items) - 5px gap
+          const dropdownHeight = 90; // Approximate height for 2 menu items
+          const topPosition = y - dropdownHeight - 5;
+          
+          setMenuPosition({
+            x: rightPosition, // Right position from screen edge
+            y: topPosition > 0 ? topPosition : y + height + 2, // Above button, or below if not enough space
+          });
+          setShowMenu(true);
+        } else {
+          // Fallback: use default position if measurement fails
+          setMenuPosition({
+            x: 10,
+            y: 100, // Default position
+          });
+          setShowMenu(true);
+        }
+      });
+    } else {
+      // Fallback: use default position if ref is not available
+      setMenuPosition({
+        x: 10,
+        y: 100,
+      });
+      setShowMenu(!showMenu);
+    }
+  };
+
+  const handleCloseMenu = () => {
+    setShowMenu(false);
   };
 
   const handleUpdate = () => {
     setShowMenu(false);
     // Navigate to UpdatePayment screen
-    navigation.navigate("UpdatePayment", {
+    navigation.navigate("UpdatePayment",{
       course,
       studentRollNo,
     });
   };
 
   const handleRefund = () => {
+    console.log('🔵 Refund button pressed!');
+    console.log('🔵 totalReceivedPayment:', paymentDetails?.totalReceivedPayment);
+    console.log('🔵 isRefundDisabled:', isRefundDisabled);
+    console.log('🔵 isDefaulter:', isDefaulter);
     setShowMenu(false);
     // Open modal like web behavior
     setShowRefundModal(true);
@@ -172,62 +274,115 @@ const CoursePaymentBlock: FC<ICoursePaymentBlock> = ({ course, studentRollNo }) 
     setShowRefundModal(false);
     setRefundAmount("");
     setRefundDate("");
+    setRefundDateObj(new Date());
+    setRefundDatePickerOpen(false);
     setRefundNote("");
   };
 
-  const handleSaveRefund = () => {
-    if (!refundAmount || !refundDate) {
+  const handleSaveRefund = async () => {
+    if (!refundAmount || !refundDateObj) {
       Alert.alert("Error", "Please fill all required fields");
       return;
     }
-    // TODO: Integrate refund API
-    Alert.alert("Success", "Refund request submitted successfully");
-    handleCloseRefundModal();
+
+    if (!authUser || !selectedOrganization) {
+      Alert.alert("Error", "User or organization details are missing");
+      return;
+    }
+
+    const refundAmountNumber = Number(refundAmount);
+    if (Number.isNaN(refundAmountNumber) || refundAmountNumber <= 0) {
+      Alert.alert("Error", "Please enter a valid refund amount");
+      return;
+    }
+
+    if (refundAmountNumber > calculatedReceivedPayment) {
+      Alert.alert("Error", "Refund amount cannot exceed received payment");
+      return;
+    }
+
+    const formattedRefundDate = formatDateForApi(refundDateObj);
+    if (!formattedRefundDate) {
+      Alert.alert("Error", "Please select a valid refund date");
+      return;
+    }
+
+    const payload = {
+      user: {
+        userCustomerId: authUser.customerId,
+        userCustomerName: `${authUser.customerName || ""}`.trim(),
+        userCustomerEmail: authUser.customerEmail,
+        roleName: selectedOrganization?.role?.roleName || authUser.userType,
+        roleId: selectedOrganization?.role?.roleId || authUser.employeeId,
+        userEmployeeId: authUser.employeeId || "",
+      },
+      customerId: selectedOrganization?.customerId,
+      organizationId: selectedOrganization?.organizationId,
+      rollNo: studentRollNo,
+      courseId: course.courseId,
+      updatedPaymentStatus: "refund",
+      updatedDate: formattedRefundDate,
+      refund: {
+        refundAmount: refundAmountNumber,
+        refundDate: formattedRefundDate,
+        refundNote: refundNote || "",
+      },
+    };
+
+    try {
+      setIsSavingRefund(true);
+      const response = await request({
+        method: "POST",
+        url: "/student-fnp-prod/updateStudentPaymentStatus",
+        data: payload,
+      });
+
+      if (response?.statusCode === 200) {
+        Alert.alert("Success", "Refund updated successfully", [
+          {
+            text: "OK",
+            onPress: () => {
+              handleCloseRefundModal();
+              queryClient.invalidateQueries({
+                queryKey: [apiUrls.student.FETCH_STUDENT_DETAILS, studentRollNo],
+              });
+              queryClient.invalidateQueries({
+                queryKey: [apiUrls.course.FETCH_COURSE_DETAILS, { courseId: course.courseId }],
+              });
+            },
+          },
+        ]);
+      } else {
+        Alert.alert("Error", response?.message || "Failed to update refund");
+      }
+    } catch (error) {
+      console.error("Error updating refund:", error);
+      Alert.alert("Error", "Failed to update refund. Please try again.");
+    } finally {
+      setIsSavingRefund(false);
+    }
   };
 
   return (
     <>
     <Flex flexDirection="column" styles={styles.cardContainer}>
-        <Flex flexDirection="row" justify="space-between" align="center" styles={styles.cardHeader} w={"100%"}>
-          <ScalableText style={styles.cardTitle} fontFamily="Bold">
-            {data?.data?.courseName}
-          </ScalableText>
-          {/* Show menu for all status to maintain consistent card size */}
-          <View style={styles.menuContainer}>
+        <View style={styles.cardHeaderWrapper}>
+          <Flex flexDirection="row" justify="space-between" align="center" styles={styles.cardHeader} w={"100%"}>
+            <ScalableText style={styles.cardTitle} fontFamily="Bold">
+              {data?.data?.courseName}
+            </ScalableText>
+            {/* Show menu for all status to maintain consistent card size */}
+            <View style={styles.menuContainer}>
             {hasUpdatePermission("Student") ? (
               <>
-                <TouchableOpacity onPress={handleMenuPress} style={styles.menuButton}>
-                  <ScalableText style={styles.menuIcon} fontFamily="Bold">⋯</ScalableText>
-                </TouchableOpacity>
-                
-                {showMenu && (
-                  <TouchableWithoutFeedback onPress={() => setShowMenu(false)}>
-                    <View style={styles.dropdownMenu}>
-                      <TouchableOpacity style={styles.menuItem} onPress={handleUpdate}>
-                        <ScalableText style={styles.menuItemText} fontFamily="Medium">Update</ScalableText>
-                      </TouchableOpacity>
-                      {/* Always show refund button but disable if no payment received */}
-                      <TouchableOpacity 
-                        style={[
-                          styles.menuItem,
-                          (calculatedReceivedPayment <= 0 && paymentDetails?.totalReceivedPayment <= 0) && styles.menuItemDisabled
-                        ]} 
-                        onPress={(calculatedReceivedPayment > 0 || paymentDetails?.totalReceivedPayment > 0) ? handleRefund : undefined}
-                        disabled={(calculatedReceivedPayment <= 0 && paymentDetails?.totalReceivedPayment <= 0)}
-                      >
-                        <ScalableText 
-                          style={{
-                            ...styles.menuItemText,
-                            ...((calculatedReceivedPayment <= 0 && paymentDetails?.totalReceivedPayment <= 0) && styles.menuItemTextDisabled)
-                          }} 
-                          fontFamily="Medium"
-                        >
-                          Refund
-                        </ScalableText>
-                      </TouchableOpacity>
-                    </View>
-                  </TouchableWithoutFeedback>
-                )}
+                <View ref={menuButtonRef}>
+                  <TouchableOpacity 
+                    onPress={handleMenuPress} 
+                    style={styles.menuButton}
+                  >
+                    <ScalableText style={styles.menuIcon} fontFamily="Bold">⋯</ScalableText>
+                  </TouchableOpacity>
+                </View>
               </>
             ) : (
               <View style={styles.menuButton}>
@@ -235,7 +390,8 @@ const CoursePaymentBlock: FC<ICoursePaymentBlock> = ({ course, studentRollNo }) 
               </View>
             )}
           </View>
-        </Flex>
+          </Flex>
+        </View>
       <Flex my={10} mx={10}>
         <Grid>
           <Row style={styles.sectionContentRow}>
@@ -256,7 +412,8 @@ const CoursePaymentBlock: FC<ICoursePaymentBlock> = ({ course, studentRollNo }) 
                   ...styles.sectionContentDataText,
                   textTransform: "capitalize",
                   color:
-                    paymentDetails?.coursePaymentStatus === "due"
+                    (paymentDetails?.coursePaymentStatus || "").toLowerCase() === "due" ||
+                    (paymentDetails?.coursePaymentStatus || "").toLowerCase() === "refund"
                       ? COLORS.textError
                       : COLORS.textSuccess,
                 }}
@@ -376,6 +533,78 @@ const CoursePaymentBlock: FC<ICoursePaymentBlock> = ({ course, studentRollNo }) 
       </Flex>
     </Flex>
 
+    {/* Dropdown Menu Modal */}
+    <Modal
+      visible={showMenu}
+      transparent={true}
+      animationType="fade"
+      onRequestClose={handleCloseMenu}
+    >
+      <TouchableWithoutFeedback onPress={handleCloseMenu}>
+        <View style={styles.dropdownModalOverlay}>
+          <TouchableWithoutFeedback onPress={() => {}}>
+            <View 
+              style={[
+                styles.dropdownMenuModal,
+                { 
+                  top: (typeof menuPosition.y === 'number' && !isNaN(menuPosition.y) && menuPosition.y >= 0) ? menuPosition.y : 100,
+                  right: (typeof menuPosition.x === 'number' && !isNaN(menuPosition.x) && menuPosition.x >= 0) ? menuPosition.x : 10,
+                  left: undefined,
+                }
+              ]}
+            >
+              <View style={styles.dropdownMenuContent}>
+                {/* Update - disable when student is defaulter */}
+                <TouchableOpacity
+                  style={[
+                    styles.menuItem,
+                    isUpdateDisabled && styles.menuItemDisabled,
+                  ]}
+                  onPress={() => {
+                    handleUpdate();
+                  }}
+                  disabled={isUpdateDisabled}
+                  activeOpacity={0.7}
+                >
+                  <ScalableText
+                    style={isUpdateDisabled ? styles.menuItemTextDisabled : styles.menuItemText}
+                    fontFamily="Medium"
+                  >
+                    Update
+                  </ScalableText>
+                </TouchableOpacity>
+                {/* Always show refund button but disable if no payment received or student is defaulter */}
+                <TouchableOpacity
+                  style={[
+                    styles.menuItem,
+                    styles.menuItemLast,
+                    isRefundDisabled && styles.menuItemDisabled
+                  ]}
+                  onPress={() => {
+                    console.log('🔵 Refund TouchableOpacity onPress called!');
+                    console.log('🔵 isRefundDisabled:', isRefundDisabled);
+                    console.log('🔵 calculatedReceivedPayment:', calculatedReceivedPayment);
+                    if (!isRefundDisabled) {
+                      handleRefund();
+                    }
+                  }}
+                  disabled={isRefundDisabled}
+                  activeOpacity={0.7}
+                >
+                  <ScalableText
+                    style={isRefundDisabled ? styles.menuItemTextDisabled : styles.menuItemText}
+                    fontFamily="Medium"
+                  >
+                    Refund
+                  </ScalableText>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </TouchableWithoutFeedback>
+        </View>
+      </TouchableWithoutFeedback>
+    </Modal>
+
     {/* Refund Payment Modal */}
     <Modal
       visible={showRefundModal}
@@ -436,12 +665,15 @@ const CoursePaymentBlock: FC<ICoursePaymentBlock> = ({ course, studentRollNo }) 
               <ScalableText style={styles.inputLabel} fontFamily="Medium">
                 Refund date *
               </ScalableText>
-              <TextInput
+              <TouchableOpacity
                 style={styles.textInput}
-                value={refundDate}
-                onChangeText={setRefundDate}
-                placeholder="Select date (DD/MM/YYYY)"
-              />
+                onPress={() => setRefundDatePickerOpen(true)}
+                activeOpacity={0.8}
+              >
+                <ScalableText style={{ fontSize: 14, color: COLORS.black }} fontFamily="Regular">
+                  {refundDate || formatDateDisplay(refundDateObj) || "Select date (DD/MM/YYYY)"}
+                </ScalableText>
+              </TouchableOpacity>
             </View>
 
             <View style={styles.inputContainer}>
@@ -461,7 +693,12 @@ const CoursePaymentBlock: FC<ICoursePaymentBlock> = ({ course, studentRollNo }) 
 
           {/* Save Button */}
           <View style={styles.buttonContainer}>
-            <TouchableOpacity style={styles.saveButton} onPress={handleSaveRefund}>
+            <TouchableOpacity
+              style={[styles.saveButton, isSavingRefund && styles.saveButtonDisabled]}
+              onPress={handleSaveRefund}
+              disabled={isSavingRefund}
+              activeOpacity={0.8}
+            >
               <ScalableText style={styles.saveButtonText} fontFamily="Medium">
                 SAVE
               </ScalableText>
@@ -470,6 +707,20 @@ const CoursePaymentBlock: FC<ICoursePaymentBlock> = ({ course, studentRollNo }) 
         </View>
       </View>
     </Modal>
+
+    {/* Refund Date Picker */}
+    <DatePicker
+      modal
+      open={refundDatePickerOpen}
+      mode="date"
+      date={refundDateObj || new Date()}
+      onConfirm={(date) => {
+        setRefundDatePickerOpen(false);
+        setRefundDateObj(date);
+        setRefundDate(formatDateDisplay(date));
+      }}
+      onCancel={() => setRefundDatePickerOpen(false)}
+    />
     </>
   );
 };
@@ -484,11 +735,17 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     marginBottom: 30,
     minWidth: 167,
+    overflow: 'visible',
+  },
+  cardHeaderWrapper: {
+    position: 'relative',
+    overflow: 'visible',
   },
   cardHeader: {
     borderBottomWidth: 1,
     borderColor: "#E0E0E0",
     padding: 15,
+    overflow: 'visible',
   },
   cardTitle: {
     fontSize: 14,
@@ -523,26 +780,55 @@ const styles = StyleSheet.create({
   },
   menuContainer: {
     position: 'relative',
+    zIndex: 1000,
+    elevation: 10,
   },
   dropdownMenu: {
     position: 'absolute',
-    top: 35,
+    top: 40,
     right: 0,
     backgroundColor: COLORS.white,
     borderRadius: 8,
-    elevation: 8,
+    elevation: 15,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    minWidth: 100,
-    zIndex: 1000,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    minWidth: 120,
+    zIndex: 1001,
+    overflow: 'visible',
+  },
+  dropdownModalOverlay: {
+    flex: 1,
+    backgroundColor: 'transparent',
+  },
+  dropdownMenuModal: {
+    position: 'absolute',
+    backgroundColor: 'transparent',
+    marginTop: '80%',
+    marginRight: '3%',
+  },
+  dropdownMenuContent: {
+    backgroundColor: COLORS.white,
+    borderRadius: 8,
+    elevation: 15,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    minWidth: 120,
+    overflow: 'hidden',
   },
   menuItem: {
     paddingVertical: 12,
     paddingHorizontal: 16,
     borderBottomWidth: 1,
     borderBottomColor: '#E0E0E0',
+    minHeight: 44,
+    justifyContent: 'center',
+  },
+  menuItemLast: {
+    borderBottomWidth: 0,
   },
   menuItemDisabled: {
     opacity: 0.5,
@@ -635,6 +921,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 30,
     paddingVertical: 12,
     borderRadius: 8,
+  },
+  saveButtonDisabled: {
+    opacity: 0.6,
   },
   saveButtonText: {
     color: COLORS.white,

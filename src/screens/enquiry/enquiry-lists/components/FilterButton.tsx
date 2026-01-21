@@ -33,12 +33,11 @@ const FilterButton: FC<IFilterButton> = ({
     { label: "New Enquiries", value: "new" },
     { label: "Active", value: "active" },
     { label: "Inactive", value: "inActive" },
+    { label: "Pending", value: "pending" },
+    { label: "Not Interest", value: "Not Interested" },
     { label: "Interested", value: "Interested" },
-    { label: "Not Interested", value: "Not Interested" },
-    { label: "Call Later", value: "Call later" },
     { label: "Call Not Picked", value: "Call Not Picked" },
-    { label: "Attend Demo", value: "Attend Demo" },
-    { label: "Success Leads", value: "Success Leads" },
+    { label: "Successful Leads", value: "Success Leads" },
   ];
 
   return (

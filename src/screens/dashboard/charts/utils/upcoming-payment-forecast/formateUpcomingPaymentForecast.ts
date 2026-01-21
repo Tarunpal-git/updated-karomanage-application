@@ -1,24 +1,26 @@
 import moment from "moment";
 
-interface IPaymentForecastData {
-  studentFirstName: string;
-  studentLastName: string;
-  rollNo: string;
-  studentCourse: string;
-  duePayment: string;
-  nextpaymentDate: string;
-}
-
 interface IGraphData {
   label: number | string; // Day of the month or month name
   value: number; // Amount for that day or month
 }
 
 export const formateUpcomingPaymentForecast = (
-  data: IPaymentForecastData[],
+  data: TPaymentForecast[] | IPaymentForecastData[] | null | undefined,
   year?: number,
   month?: number
 ) => {
+  // Fallback for unexpected / missing data shape
+  if (!Array.isArray(data) || data.length === 0) {
+    return {
+      totalPayment: 0,
+      yearTotal: 0,
+      monthlyTotal: 0,
+      graphData: Array(12).fill({ label: "", value: 0 }) as IGraphData[],
+      maxValue: 0,
+    };
+  }
+
   const monthlyPayments: { [key: string]: number } = {
     Jan: 0,
     Feb: 0,
@@ -52,8 +54,14 @@ export const formateUpcomingPaymentForecast = (
     dailyPayments[day] = 0;
   }
 
-  data.forEach((student) => {
-    const { duePayment, nextpaymentDate } = student;
+  data.forEach((student: any) => {
+    const { duePayment, nextpaymentDate } =
+      student.Details ?? student; // support TPaymentForecastDetails[] or flat data
+
+    if (duePayment == null || !nextpaymentDate) {
+      return;
+    }
+
     const paymentAmount = parseFloat(duePayment.toString());
     const paymentDate = moment(nextpaymentDate, "DD-MM-YYYY");
 
