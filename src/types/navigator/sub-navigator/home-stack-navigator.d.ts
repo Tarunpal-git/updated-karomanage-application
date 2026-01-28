@@ -29,7 +29,9 @@ type THomeStackNavigatorParams = {
     studentRollNo: string;
     studentDetails: TStudentList;
   };
-  CreateBatch: undefined;
+  CreateBatch: {
+    courseId?: string;
+  };
   CreateCourse: undefined;
   AddCoupon: {
     returnScreen?: string;

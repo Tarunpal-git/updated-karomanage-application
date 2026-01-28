@@ -478,8 +478,8 @@
 import React, { useMemo, useState, useEffect } from "react";
 import SafeView from "../../../@ui/safe-view/SafeView";
 import AppHeader from "../../../@ui/app-header/AppHeader";
-import { useNavigation } from "@react-navigation/native";
-import { TScreenNavigator } from "../../../types/navigator/screen-navigator";
+import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
+import { TScreenNavigator, TScreenNavigatorParams } from "../../../types/navigator/screen-navigator";
 import { StyleSheet, View, Dimensions } from "react-native";
 import { COLORS } from "../../../colors";
 import ScalableText from "../../../@ui/scalable-text/ScalableText";
@@ -491,13 +491,19 @@ import ControlledSelect from "../../../@ui/controlled-select/ControlledSelect";
 import CalendarInput from "../../../@ui/calendar-input/CalendarInput";
 import Button from "../../../@ui/button/Button";
 import { useCourseListsQuery } from "../../../apis/hooks/course/query/useCourseLists.query";
+import { useCourseDetailsQuery } from "../../../apis/hooks/course/query/useCourseDetails.query";
 import { useCreateBatchMutation } from "../../../apis/hooks/batch/mutation/useCreateBatch.mutation";
+import { useUpdateBatchMutation } from "../../../apis/hooks/batch/mutation/useUpdateBatch.mutation";
+import { useUpdateCourseMutation } from "../../../apis/hooks/courses/mutation/useUpdateCourse.mutation";
+import { useBatchDetailsQuery } from "../../../apis/hooks/batch/query/useBatchDetails.query";
 import ThemeScrollView from "../../../@ui/theme-scroll-view/ThemeScrollView";
 import { useQueryClient } from "@tanstack/react-query";
 import { apiUrls } from "../../../apis/urls";
 
 const CreateBatch = () => {
   const navigation = useNavigation<TScreenNavigator>();
+  const route = useRoute<RouteProp<TScreenNavigatorParams, "CreateBatch">>();
+  const courseIdFromRoute = route.params?.courseId;
   const [confirmation, setConfirmation] = useState(false);
   const handler = useForm({
     defaultValues: forms.createBatch.values,
@@ -505,9 +511,16 @@ const CreateBatch = () => {
     reValidateMode: "onChange",
     mode: "onChange",
   });
-  const { mutateAsync, isPending } = useCreateBatchMutation();
+  const { mutateAsync: createBatch, isPending } = useCreateBatchMutation();
+  const { mutateAsync: updateBatch } = useUpdateBatchMutation();
+  const { mutateAsync: updateCourse } = useUpdateCourseMutation();
   const queryClient = useQueryClient();
   const { data: courseData, isLoading: courseLoading } = useCourseListsQuery();
+  
+  // Fetch course details if courseId is provided from route
+  const { data: courseDetailsData } = useCourseDetailsQuery(
+    courseIdFromRoute ? { courseId: courseIdFromRoute } : { courseId: "" }
+  );
 
   // Function to calculate default batch dates based on course data
   const calculateDefaultBatchDates = (courseId: string) => {
@@ -598,6 +611,14 @@ const CreateBatch = () => {
     console.log('=== END COURSE CHANGE HANDLER DEBUG ===');
   };
 
+  // Pre-select course if courseId is provided from route
+  useEffect(() => {
+    if (courseIdFromRoute && courseData?.data && !handler.watch('courseId')) {
+      handler.setValue('courseId', courseIdFromRoute);
+      handleCourseChange(courseIdFromRoute);
+    }
+  }, [courseIdFromRoute, courseData]);
+
   // Watch for course changes and update dates automatically
   useEffect(() => {
     const selectedCourseId = handler.watch('courseId');
@@ -632,16 +653,118 @@ const CreateBatch = () => {
 
   const handleFinalSubmit = async () => {
     const values = handler.getValues();
-    const res = await mutateAsync(values);
-    if (res.statusCode === 200) {
+    try {
+      // Step 1: Create batch
+      const createRes = await createBatch(values);
+      if (createRes.statusCode !== 200) {
+        // @ts-ignore
+        customAlert.show({ message: createRes.message || "Batch creation failed." });
+        setConfirmation(false);
+        return;
+      }
+
+      // Get batchId from response - response structure: { data: [{ batchId: "...", ... }] }
+      const batchId = Array.isArray(createRes?.data) && createRes.data.length > 0
+        ? createRes.data[0].batchId
+        : createRes?.data?.batchId || createRes?.data?.batch?.[0]?.batchId;
+      
+      if (!batchId) {
+        console.error("Batch ID not found in create response:", createRes);
+        // @ts-ignore
+        customAlert.show({ message: "Batch created but batch ID not found." });
+        setConfirmation(false);
+        return;
+      }
+
+      // Step 2: Fetch batch details to get complete batch object
+      const batchDetailsRes = await queryClient.fetchQuery({
+        queryKey: [apiUrls.batch.FETCH_BATCH_DETAILS, { batchId }],
+        queryFn: async () => {
+          const { request } = await import("../../../services/axios.service");
+          const { store } = await import("../../../app/store");
+          const organization = store.getState().auth.selectedOrganization;
+          return request({
+            url: apiUrls.batch.FETCH_BATCH_DETAILS,
+            method: "POST",
+            data: {
+              batchId,
+              customerId: organization?.customerId,
+              organizationId: organization?.organizationId,
+            },
+          });
+        },
+      });
+
+      const batchDetails = batchDetailsRes?.data;
+
+      // Step 3: Update course to include the new batch (if courseId is provided)
+      if (values.courseId && courseDetailsData?.data) {
+        const courseData = courseDetailsData.data;
+        const courseUpdatePayload = {
+          courseId: values.courseId,
+          courseName: courseData.courseName,
+          courseDescription: courseData.courseDescription || "",
+          courseFee: courseData.courseFee || 0,
+          courseFeeDescription: courseData.courseFeeDescription || "",
+          maxPaymentInstallment: courseData.maxPaymentInstallment || 1,
+          courseDurationYear: Math.floor((courseData.courseDuration || 0) / 12),
+          courseDurationMonth: (courseData.courseDuration || 0) % 12,
+          mode: courseData.mode || "offline",
+          courseStatus: courseData.courseStatus || "active",
+          subjects: courseData.subjects || [],
+        };
+
+        try {
+          await updateCourse(courseUpdatePayload);
+          console.log("Course updated successfully with new batch");
+        } catch (error) {
+          console.error("Error updating course:", error);
+          // Continue even if course update fails
+        }
+      }
+
+      // Step 4: Update batch to ensure proper linking
+      if (batchDetails) {
+        const batchUpdatePayload = {
+          batchId,
+          batchName: values.batchName,
+          batchDescription: values.batchDescription || "",
+          batchStartDate: values.batchStartDate,
+          batchEndDate: values.batchEndDate,
+          setBatchTime: values.setBatchTime || "No",
+          batchClassStartTime: values.batchClassStartTime || "",
+          batchClassEndTime: values.batchClassEndTime || "",
+          batchStatus: "active",
+          courses: batchDetails.courses || [],
+          students: batchDetails.students || [],
+          teacher: batchDetails.teacher || [],
+          subjects: batchDetails.subjects || [],
+          batchDetails: batchDetails,
+        };
+
+        try {
+          await updateBatch(batchUpdatePayload);
+          console.log("Batch updated successfully");
+        } catch (error) {
+          console.error("Error updating batch:", error);
+          // Continue even if batch update fails
+        }
+      }
+
       // @ts-ignore
       customAlert.show({ message: "Batch created successfully!" });
+      
+      // Invalidate queries to refresh data
       queryClient.invalidateQueries({ queryKey: [apiUrls.batch.FETCH_BATCHES_LIST] });
+      queryClient.invalidateQueries({ queryKey: [apiUrls.course.FETCH_COURSE_DETAILS] });
+      queryClient.invalidateQueries({ queryKey: [apiUrls.batch.FETCH_BATCH_DETAILS] });
+      
       handler.reset();
       navigation.goBack();
-    } else {
+    } catch (error: any) {
+      console.error("Error in batch creation flow:", error);
       // @ts-ignore
-      customAlert.show({ message: res.message || "Batch creation failed." });
+      customAlert.show({ message: error?.response?.data?.message || "Failed to create batch." });
     }
     setConfirmation(false);
   };

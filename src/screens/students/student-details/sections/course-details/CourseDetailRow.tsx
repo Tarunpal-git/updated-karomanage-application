@@ -444,8 +444,8 @@ const CourseDetailRow: FC<ICourseDetailRow> = ({
                   setSelectedBatchOption(null);
                   setIsBatchDropdownOpen(false);
 
-                  // Navigate to global CreateBatch flow
-                  navigation.navigate("CreateBatch");
+                  // Navigate to global CreateBatch flow with courseId
+                  navigation.navigate("CreateBatch", { courseId });
                 }}
               >
                 <ScalableText

@@ -1,40 +1,33 @@
 import { StyleSheet } from "react-native";
-import React, { FC, memo, useMemo } from "react";
+import React, { FC, memo } from "react";
 import { Col, Row } from "react-native-easy-grid";
 import ScalableText from "../../../../../@ui/scalable-text/ScalableText";
 import Flex from "../../../../../@ui/flex/Flex";
-import { useCourseDetailsQuery } from "../../../../../apis/hooks/course/query/useCourseDetails.query";
 
 interface ICourseDetailRow {
-  courseId: string;
+  course: any; // Course data from listCourses API
 }
 
-const CourseDetailRow: FC<ICourseDetailRow> = ({ courseId }) => {
-  const { data, isLoading } = useCourseDetailsQuery({ courseId });
-
-  const course: TCourseData = useMemo(() => {
-    if (!isLoading && data?.data) {
-      return data.data;
-    } else {
-      return undefined;
-    }
-  }, [data, isLoading]);
+const CourseDetailRow: FC<ICourseDetailRow> = ({ course }) => {
+  if (!course) {
+    return null;
+  }
 
   return (
     <Row style={styles.dataRow}>
       <Col size={25}>
         <ScalableText fontFamily="Regular" style={styles.dataText}>
-          {course?.courseName}
+          {course?.courseName || "-"}
         </ScalableText>
       </Col>
       <Col size={25}>
         <ScalableText fontFamily="Regular" style={styles.dataText}>
-          {course?.courseFee?.toLocaleString()}
+          {course?.courseFee ? course.courseFee.toLocaleString() : "-"}
         </ScalableText>
       </Col>
       <Col size={30}>
         <ScalableText fontFamily="Regular" style={styles.dataText}>
-          {course?.maxPaymentInstallment}
+          {course?.maxPaymentInstallment || "-"}
         </ScalableText>
       </Col>
       <Col size={20}>
@@ -52,7 +45,7 @@ const CourseDetailRow: FC<ICourseDetailRow> = ({ courseId }) => {
             }}
             fontFamily="Medium"
           >
-            {course?.courseStatus}
+            {course?.courseStatus || "-"}
           </ScalableText>
         </Flex>
       </Col>

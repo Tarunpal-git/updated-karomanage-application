@@ -12,6 +12,7 @@ type TScreenNavigatorParams = {
   GenerateEnquiry: undefined;
   EnquiryDetails: {
     id: string;
+    leadId?: string; // Lead ID for getLeadFollowUp API (different from enquiry id)
   };
   ViewEnquiry: {
     id: string;
@@ -56,7 +57,9 @@ type TScreenNavigatorParams = {
 
   CreateCourse: undefined;
 
-  CreateBatch: undefined;
+  CreateBatch: {
+    courseId?: string;
+  };
 
   EmployeeList: undefined;
   EmployeeDetails: {

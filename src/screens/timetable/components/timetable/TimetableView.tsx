@@ -83,16 +83,22 @@ const TimetableView = ({ onRequestClassroomsTab }: TimetableViewProps) => {
   const queryClient = useQueryClient();
   const deleteMutation = useDeleteTimeTableMutation();
 
-  // ⭐ Batch options from API
+  // ⭐ Batch options from API - Filter only ACTIVE batches
   const batchOptions = useMemo<TBatchOption[]>(() => {
     if (batchData?.statusCode === 200 && Array.isArray(batchData.data)) {
-      return batchData.data.map((batch: any) => {
-        const batchName = batch.batchName ?? batch.batchCode ?? "Unnamed batch";
-        return {
-          id: batch.batchId ?? batch.batchCode ?? batch.batchName,
-          label: capitalizeFirstLetter(batchName),
-        };
-      });
+      // Filter only active batches
+      return batchData.data
+        .filter((batch: any) => {
+          const batchStatus = batch.batchStatus?.toLowerCase();
+          return batchStatus === "active";
+        })
+        .map((batch: any) => {
+          const batchName = batch.batchName ?? batch.batchCode ?? "Unnamed batch";
+          return {
+            id: batch.batchId ?? batch.batchCode ?? batch.batchName,
+            label: capitalizeFirstLetter(batchName),
+          };
+        });
     }
     return [];
   }, [batchData]);
