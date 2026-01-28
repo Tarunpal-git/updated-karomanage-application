@@ -30,3 +30,6 @@ export const useTeacherDetailsQuery = (teacherId: string) => {
     queryFn: () => get(teacherId),
   });
 };
+
+
+

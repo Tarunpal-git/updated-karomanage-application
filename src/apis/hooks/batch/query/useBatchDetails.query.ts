@@ -28,3 +28,5 @@ export const useBatchDetailsQuery = (data: IData) => {
     queryFn: () => get(data),
   });
 };
+
+

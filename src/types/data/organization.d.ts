@@ -43,6 +43,11 @@ type TOrganizationName = {
   organizationAddress: string;
   organizationEmail: string;
   lastUpdatedDate: number;
+  organizationEmail: string;
+  organizationWebsiteUrl: string;
+  organizationLogo: string;
+  organizationAddress: string;
+
   role: {
     roleId: string;
     roleName: string;

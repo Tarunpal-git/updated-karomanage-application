@@ -211,32 +211,6 @@ const StudentProfile = () => {
                       style={styles.sectionContentTitle}
                       fontFamily="Bold"
                     >
-                      Id
-                    </ScalableText>
-                    <ScalableText
-                      style={styles.sectionContentTitle}
-                      fontFamily="Bold"
-                    >
-                      :
-                    </ScalableText>
-                  </Flex>
-                </Col>
-                <Col>
-                  <ScalableText
-                    style={styles.sectionContentDataText}
-                    fontFamily="Medium"
-                  >
-                    {isEmptyString(studentDetails.rollNo)}
-                  </ScalableText>
-                </Col>
-              </Row>
-              <Row style={styles.sectionContentRow}>
-                <Col size={0.6}>
-                  <Flex justify="space-between">
-                    <ScalableText
-                      style={styles.sectionContentTitle}
-                      fontFamily="Bold"
-                    >
                       Name
                     </ScalableText>
                     <ScalableText

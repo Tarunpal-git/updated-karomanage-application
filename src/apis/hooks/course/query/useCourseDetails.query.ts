@@ -28,3 +28,5 @@ export const useCourseDetailsQuery = (data: IData) => {
     queryFn: () => get(data),
   });
 };
+
+
