@@ -12,6 +12,7 @@ type TFollowUp = {
 
 type TEnquiryData = {
   id: string;
+  leadId?: string; // Lead ID for getLeadFollowUp API (different from enquiry id)
   visited: boolean;
   followUp: TFollowUp[];
   studentName: string;

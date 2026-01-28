@@ -56,6 +56,7 @@
     "react-native-gesture-handler": "^2.21.0",
     "react-native-get-random-values": "^2.0.0",
     "react-native-gifted-charts": "^1.4.11",
+    "react-native-haptic-feedback": "^2.3.3",
     "react-native-image-picker": "^7.2.3",
     "react-native-immediate-phone-call": "^2.0.0",
     "react-native-linear-gradient": "^2.8.3",

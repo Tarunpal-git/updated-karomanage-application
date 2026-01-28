@@ -75,12 +75,60 @@ const updateCourse = async (data: any) => {
   const selectedOrganization = store.getState().auth.selectedOrganization;
   
   // Process subjects to match web portal structure
-  const processedSubjects = (data.subjects || []).map((subject: any, index: number) => ({
-    subjectId: subject.subjectId || `temp_${Date.now()}_${index}`, // Use existing subjectId or generate temp one
-    subjectName: subject.subjectName,
-    subjectDescription: subject.subjectDescription,
-    dateCreated: subject.dateCreated || Date.now(), // Use existing dateCreated or current timestamp
-  }));
+  // IMPORTANT: Existing subjects must include subjectId and dateCreated
+  // New subjects should only have subjectName (let backend generate ID)
+  const processedSubjects = (data.subjects || []).map((subject: any, index: number) => {
+    // Ensure subjectName is always a valid string
+    const subjectName = subject.subjectName?.trim() || "";
+    if (!subjectName) {
+      console.warn(`⚠️ Subject at index ${index} has empty or undefined subjectName`);
+    }
+    
+    // Check if this is an existing subject (has real subjectId) or new subject
+    const hasRealSubjectId = subject.subjectId && 
+      !subject.subjectId.startsWith('temp_') && 
+      !subject.subjectId.startsWith('temp-');
+    
+    if (hasRealSubjectId) {
+      // EXISTING SUBJECT: Include subjectId and dateCreated (as per web payload)
+      const subjectObj: any = {
+        subjectId: subject.subjectId,
+        subjectName: subjectName,
+        dateCreated: subject.dateCreated || Date.now(),
+      };
+      
+      // Only add description if it's not empty
+      if (subject.subjectDescription && subject.subjectDescription.trim() !== '') {
+        subjectObj.subjectDescription = subject.subjectDescription;
+      }
+      
+      return subjectObj;
+    } else {
+      // NEW SUBJECT: Send with temporary ID (like web portal does)
+      // Backend will replace temporary ID with real ID
+      // Format: temp_{timestamp}_{randomNumber}
+      const subjectObj: any = {
+        subjectName: subjectName,
+      };
+      
+      // Include temporary ID if provided (helps backend track the subject)
+      // Web portal sends temporary IDs, so backend accepts them
+      if (subject.subjectId && (subject.subjectId.startsWith('temp_') || subject.subjectId.startsWith('temp-'))) {
+        subjectObj.subjectId = subject.subjectId;
+        // Also include dateCreated if provided (temporary timestamp)
+        if (subject.dateCreated) {
+          subjectObj.dateCreated = subject.dateCreated;
+        }
+      }
+      
+      // Only add description if it's not empty
+      if (subject.subjectDescription && subject.subjectDescription.trim() !== '') {
+        subjectObj.subjectDescription = subject.subjectDescription;
+      }
+      
+      return subjectObj;
+    }
+  });
   
   const payload = {
     user: {

@@ -1,8 +1,6 @@
 import { StyleSheet } from "react-native";
 import React, { FC, memo } from "react";
 import { Col, Row } from "react-native-easy-grid";
-import Flex from "../../../../@ui/flex/Flex";
-import CheckBox from "../../../../@ui/check-box/CheckBox";
 import ScalableText from "../../../../@ui/scalable-text/ScalableText";
 import moment from "moment";
 import PopoverText from "../../../../@ui/popover-text/PopoverText";
@@ -18,31 +16,51 @@ const FollowUpRow: FC<IFollowUpRow> = ({
   handleCheckBoxClick,
   selected,
 }) => {
+  console.log("[FollowUpRow] Rendering follow-up:", query);
+  console.log("[FollowUpRow] createDate:", query?.createDate);
+  console.log("[FollowUpRow] followUpDate:", query?.followUpDate);
+  console.log("[FollowUpRow] flag:", query?.flag);
+  console.log("[FollowUpRow] message:", query?.message);
+  
+  // Format dates - handle multiple formats
+  const formatDate = (dateString: string) => {
+    if (!dateString) return "";
+    // Try DD/MM/YYYY format first
+    const parsed = moment(dateString, "DD/MM/YYYY", true);
+    if (parsed.isValid()) {
+      return parsed.format("DD-MM-YY");
+    }
+    // Try DD-MM-YYYY format
+    const parsed2 = moment(dateString, "DD-MM-YYYY", true);
+    if (parsed2.isValid()) {
+      return parsed2.format("DD-MM-YY");
+    }
+    // Return as is if can't parse
+    return dateString;
+  };
+
   return (
-    <Row
-      style={styles.dataRow}
-      onPress={() => handleCheckBoxClick(query.followUpId ?? "", !selected)}
-    >
-      <Col style={styles.formColumn}>
-        <Flex>
-          <CheckBox checked={selected} disabled={true} />
-          <ScalableText style={styles.dataText} fontFamily="Regular">
-            {moment(query?.createDate, "DD/MM/YYYY").format("DD-MM-YY")}
-          </ScalableText>
-        </Flex>
-      </Col>
+    <Row style={styles.dataRow}>
       <Col style={styles.formColumn}>
         <ScalableText style={styles.dataText} fontFamily="Regular">
-          {moment(query?.followUpDate, "DD/MM/YYYY").format("DD-MM-YY")}
+          {formatDate(query?.createDate || "")}
         </ScalableText>
       </Col>
       <Col style={styles.formColumn}>
         <ScalableText style={styles.dataText} fontFamily="Regular">
-          {query.flag}
+          {formatDate(query?.followUpDate || "")}
+        </ScalableText>
+      </Col>
+      <Col style={styles.formColumn}>
+        <ScalableText style={styles.dataText} fontFamily="Regular">
+          {query.flag || "-"}
         </ScalableText>
       </Col>
       <Col style={styles.formColumn}>
         <PopoverText text={query.message ?? ""} width={150} />
+      </Col>
+      <Col style={styles.formColumn}>
+        {/* Empty Actions column for existing follow-ups */}
       </Col>
     </Row>
   );
