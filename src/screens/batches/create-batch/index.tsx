@@ -509,6 +509,33 @@ const CreateBatch = () => {
   const queryClient = useQueryClient();
   const { data: courseData, isLoading: courseLoading } = useCourseListsQuery();
 
+  // Function to calculate end date from start date and course duration (in months)
+  const calculateEndDateFromDuration = (startDateStr: string, durationMonths: number): string | null => {
+    if (!startDateStr || !durationMonths) return null;
+    
+    try {
+      // Parse start date (format: YYYY-MM-DD)
+      const startDate = new Date(startDateStr);
+      if (isNaN(startDate.getTime())) return null;
+      
+      // Create a new date object to avoid mutating the original
+      const endDate = new Date(startDate);
+      
+      // Add months to the start date
+      endDate.setMonth(endDate.getMonth() + durationMonths);
+      
+      // Format date in YYYY-MM-DD format for CalendarInput
+      const year = endDate.getFullYear();
+      const month = String(endDate.getMonth() + 1).padStart(2, '0');
+      const day = String(endDate.getDate()).padStart(2, '0');
+      
+      return `${year}-${month}-${day}`;
+    } catch (error) {
+      console.error('Error calculating end date:', error);
+      return null;
+    }
+  };
+
   // Function to calculate default batch dates based on course data
   const calculateDefaultBatchDates = (courseId: string) => {
     if (!courseData?.data) return { startDate: null, endDate: null };
@@ -519,15 +546,20 @@ const CreateBatch = () => {
     console.log('=== BATCH DATE CALCULATION DEBUG ===');
     console.log('Selected Course:', selectedCourse);
     console.log('Course Date Created:', selectedCourse.dateCreated);
-    console.log('Course Expiry Date:', selectedCourse.courseExpiryDate);
+    console.log('Course Duration (months):', selectedCourse.courseDuration);
     
     // Use course creation date as batch start date
     const startDate = new Date(selectedCourse.dateCreated);
     
-    // Use course expiry date as batch end date (only if it exists)
+    // Calculate end date from course duration instead of using expiry date
     let endDate = null;
-    if (selectedCourse.courseExpiryDate) {
-      // Parse the expiry date (format: "29-10-2026")
+    if (selectedCourse.courseDuration) {
+      // Calculate end date by adding course duration (in months) to start date
+      const tempEndDate = new Date(startDate);
+      tempEndDate.setMonth(tempEndDate.getMonth() + selectedCourse.courseDuration);
+      endDate = tempEndDate;
+    } else if (selectedCourse.courseExpiryDate) {
+      // Fallback to course expiry date if duration is not available
       const expiryDateParts = selectedCourse.courseExpiryDate.split('-');
       endDate = new Date(
         parseInt(expiryDateParts[2]), // year
@@ -537,7 +569,7 @@ const CreateBatch = () => {
     }
     
     console.log('Parsed Start Date (from course creation):', startDate);
-    console.log('Parsed End Date (from course expiry):', endDate);
+    console.log('Calculated End Date (from duration):', endDate);
     
     // Format dates in YYYY-MM-DD format for CalendarInput
     const formatDateForInput = (date: Date) => {
@@ -616,6 +648,36 @@ const CreateBatch = () => {
     });
     return () => subscription.unsubscribe();
   }, [handler]);
+
+  // Automatically calculate and update end date when start date changes
+  useEffect(() => {
+    const startDate = handler.watch('batchStartDate');
+    const courseId = handler.watch('courseId');
+    
+    // Only auto-calculate if both start date and course are selected
+    if (startDate && courseId && courseData?.data) {
+      const selectedCourse = courseData.data.find((course: any) => course.courseId === courseId);
+      
+      if (selectedCourse && selectedCourse.courseDuration) {
+        // Calculate end date from start date + course duration
+        const calculatedEndDate = calculateEndDateFromDuration(startDate, selectedCourse.courseDuration);
+        
+        if (calculatedEndDate) {
+          console.log('=== AUTO CALCULATING END DATE ===');
+          console.log('Start Date:', startDate);
+          console.log('Course Duration (months):', selectedCourse.courseDuration);
+          console.log('Calculated End Date:', calculatedEndDate);
+          console.log('=== END AUTO CALCULATION ===');
+          
+          // Update the end date field
+          handler.setValue('batchEndDate', calculatedEndDate, { 
+            shouldValidate: true,
+            shouldDirty: true 
+          });
+        }
+      }
+    }
+  }, [handler.watch('batchStartDate'), handler.watch('courseId'), courseData]);
 
   const COURSES_LIST = useMemo(() => {
     return courseData?.data
@@ -774,17 +836,27 @@ const CreateBatch = () => {
               <ScalableText style={styles.inputLabel} fontFamily="Medium">
                 Batch End Date*
               </ScalableText>
-              <CalendarInput
-  label="Select end date"
-  handler={handler}
-  name="batchEndDate"
-  onChange={(date) => {
-    handler.setValue('batchEndDate', date, { 
-      shouldValidate: true,
-      shouldDirty: true 
-    });
-  }}
-/>
+              {(() => {
+                const courseId = handler.watch('courseId');
+                const selectedCourse = courseData?.data?.find((course: any) => course.courseId === courseId);
+                const hasCourseDuration = selectedCourse?.courseDuration && selectedCourse.courseDuration > 0;
+                
+                return (
+                  <>
+                    <CalendarInput
+                      label="Select end date"
+                      handler={handler}
+                      name="batchEndDate"
+                      disabled={hasCourseDuration}
+                    />
+                    {hasCourseDuration && (
+                      <ScalableText style={styles.helperText} fontFamily="Regular">
+                        End date is automatically calculated based on course duration. It will adjust when you change the start date.
+                      </ScalableText>
+                    )}
+                  </>
+                );
+              })()}
             </View>
             
 
@@ -817,6 +889,14 @@ const CreateBatch = () => {
                     options={TIME_OPTIONS}
                     value={handler.watch("batchClassStartTime") ? { label: handler.watch("batchClassStartTime") || "", value: handler.watch("batchClassStartTime") || "" } : { label: "", value: "" }}
                     dropdownButtonStyle={styles.inputContainer}
+                    onChangeValue={(selectedValue: string) => {
+                      handler.setValue('batchClassStartTime', selectedValue, { 
+                        shouldValidate: true,
+                        shouldDirty: true 
+                      });
+                      // Trigger validation of end time when start time changes
+                      handler.trigger('batchClassEndTime');
+                    }}
                   />
                 </View>
                 <View style={styles.inputSpacing}>
@@ -830,6 +910,12 @@ const CreateBatch = () => {
                     options={TIME_OPTIONS}
                     value={handler.watch("batchClassEndTime") ? { label: handler.watch("batchClassEndTime") || "", value: handler.watch("batchClassEndTime") || "" } : { label: "", value: "" }}
                     dropdownButtonStyle={styles.inputContainer}
+                    onChangeValue={(selectedValue: string) => {
+                      handler.setValue('batchClassEndTime', selectedValue, { 
+                        shouldValidate: true,
+                        shouldDirty: true 
+                      });
+                    }}
                   />
                 </View>
               </>

@@ -290,9 +290,10 @@ interface ICalendarInput {
   label: string;
   handler: UseFormReturn<any>;
   name: string;
+  disabled?: boolean;
 }
 
-const CalendarInput: FC<ICalendarInput> = ({ label, handler, name }) => {
+const CalendarInput: FC<ICalendarInput> = ({ label, handler, name, disabled = false }) => {
   const [selected, setSelected] = useState(moment());
   const [showCalendar, setShowCalendar] = useState(false);
 
@@ -381,14 +382,23 @@ const CalendarInput: FC<ICalendarInput> = ({ label, handler, name }) => {
       render={({ field: { value }, fieldState: { error } }) => (
         <>
           <TouchableOpacity
-            onPress={() => setShowCalendar(true)}
-            style={styles.batchRow}
-            activeOpacity={0.8}
+            onPress={() => {
+              if (!disabled) {
+                setShowCalendar(true);
+              }
+            }}
+            style={[
+              styles.batchRow,
+              disabled && styles.disabledInput
+            ]}
+            activeOpacity={disabled ? 1 : 0.8}
+            disabled={disabled}
           >
             <ScalableText 
               style={{
                 ...styles.batchTitle,
-                color: value ? COLORS.black : "#717171"
+                color: value ? COLORS.black : "#717171",
+                opacity: disabled ? 0.6 : 1
               }} 
               fontFamily="Regular"
             >
@@ -396,7 +406,12 @@ const CalendarInput: FC<ICalendarInput> = ({ label, handler, name }) => {
                 ? moment(value).format("YYYY-MM-DD")
                 : label}
             </ScalableText>
-            <AutoHeightImage source={IMAGES.calendarInputIcon} width={24} />
+            <View style={{ opacity: disabled ? 0.6 : 1 }}>
+              <AutoHeightImage 
+                source={IMAGES.calendarInputIcon} 
+                width={24}
+              />
+            </View>
           </TouchableOpacity>
           {error && (
             <ScalableText
@@ -546,5 +561,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     borderRadius: 3,
+  },
+  disabledInput: {
+    backgroundColor: '#f5f5f5',
+    opacity: 0.6,
   },
 });

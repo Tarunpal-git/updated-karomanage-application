@@ -253,12 +253,6 @@ const CourseBatchStep: React.FC<CourseBatchStepProps> = ({ onNext }) => {
                 </TouchableOpacity>
               )}
             </View>
-            {/* Show info about filtered courses */}
-            {studentDetails?.courses && studentDetails.courses.length > 0 && (
-              <ScalableText style={styles.helperText} fontFamily="Regular">
-                Note: {studentDetails.courses.length} course(s) already enrolled are hidden from the list.
-              </ScalableText>
-            )}
           </View>
 
           <View style={styles.inputSpacing}>

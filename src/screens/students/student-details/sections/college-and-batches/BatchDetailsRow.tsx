@@ -16,6 +16,7 @@ import { IMAGES } from "../../../../../images";
 import { Col, Grid, Row } from "react-native-easy-grid";
 import moment from "moment";
 import Collapsible from "react-native-collapsible";
+import { isEmptyString } from "../../../../../utils/isEmptyString";
 
 interface IBatchDetailsRow {
   batch: TStudentBatch;
@@ -109,88 +110,79 @@ const BatchDetailsRow: FC<IBatchDetailsRow> = ({ batch, isOpen, onToggle }) => {
         <Flex styles={styles.collapsedContainer}>
           <Grid>
             <Row style={styles.sectionContentRow}>
-              <Col>
-                <ScalableText
-                  style={styles.sectionContentTitle}
-                  fontFamily="SemiBold"
-                >
-                  Interval
-                </ScalableText>
+              <Col size={1.5}>
+                <Flex justify="space-between">
+                  <ScalableText
+                    style={styles.sectionContentTitle}
+                    fontFamily="SemiBold"
+                  >
+                    Interval
+                  </ScalableText>
+                  <ScalableText fontFamily="Regular">-</ScalableText>
+                </Flex>
               </Col>
               <Col>
                 <ScalableText
                   style={styles.sectionContentDataText}
                   fontFamily="Regular"
                 >
-                  {moment(batchDetails.batchStartDate, "DD/mm/yyyy").format(
-                    "DD/mm/YY"
-                  )}
-                  -
-                  {moment(batchDetails.batchEndDate, "DD/mm/yyyy").format(
-                    "DD/mm/YY"
-                  )}
+                  {batchDetails?.batchStartDate && batchDetails?.batchEndDate
+                    ? `${moment(batchDetails.batchStartDate, "DD/mm/yyyy").format(
+                        "DD/mm/YY"
+                      )} - ${moment(batchDetails.batchEndDate, "DD/mm/yyyy").format(
+                        "DD/mm/YY"
+                      )}`
+                    : "-"}
                 </ScalableText>
               </Col>
             </Row>
             <Row style={styles.sectionContentRow}>
-              <Col>
-                <ScalableText
-                  style={styles.sectionContentTitle}
-                  fontFamily="SemiBold"
-                >
-                  Class Time
-                </ScalableText>
+              <Col size={1.5}>
+                <Flex justify="space-between">
+                  <ScalableText
+                    style={styles.sectionContentTitle}
+                    fontFamily="SemiBold"
+                  >
+                    Class Time
+                  </ScalableText>
+                  <ScalableText fontFamily="Regular">-</ScalableText>
+                </Flex>
               </Col>
               <Col>
                 <ScalableText
                   style={styles.sectionContentDataText}
                   fontFamily="Regular"
                 >
-                  {batchDetails.batchClassStartTime}-
-                  {batchDetails.batchClassEndTime}
+                  {batchDetails?.batchClassStartTime && batchDetails?.batchClassEndTime
+                    ? `${batchDetails.batchClassStartTime} - ${batchDetails.batchClassEndTime}`
+                    : "-"}
                 </ScalableText>
               </Col>
             </Row>
             <Row style={styles.sectionContentRow}>
-              <Col>
-                <ScalableText
-                  style={styles.sectionContentTitle}
-                  fontFamily="SemiBold"
-                >
-                  Status
-                </ScalableText>
+              <Col size={1.5}>
+                <Flex justify="space-between">
+                  <ScalableText
+                    style={styles.sectionContentTitle}
+                    fontFamily="SemiBold"
+                  >
+                    Status
+                  </ScalableText>
+                  <ScalableText fontFamily="Regular">-</ScalableText>
+                </Flex>
               </Col>
               <Col>
                 <ScalableText
                   style={{
                     ...styles.sectionContentDataText,
                     color:
-                      batchDetails.batchStatus === "active"
+                      batchDetails?.batchStatus === "active"
                         ? COLORS.textSuccess
                         : COLORS.textError,
                   }}
                   fontFamily="Regular"
                 >
-                  {batchDetails.batchStatus}
-                </ScalableText>
-              </Col>
-            </Row>
-
-            <Row style={styles.sectionContentRow}>
-              <Col>
-                <ScalableText
-                  style={styles.sectionContentTitle}
-                  fontFamily="SemiBold"
-                >
-                  Mode
-                </ScalableText>
-              </Col>
-              <Col>
-                <ScalableText
-                  style={styles.sectionContentDataText}
-                  fontFamily="Regular"
-                >
-                  {batchDetails.batchMode}
+                  {isEmptyString(batchDetails?.batchStatus)}
                 </ScalableText>
               </Col>
             </Row>

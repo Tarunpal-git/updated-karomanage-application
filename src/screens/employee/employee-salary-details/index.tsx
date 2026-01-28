@@ -34,6 +34,8 @@ const EmployeeSalaryDetails = () => {
   } = useRoute<RouteProp<TScreenNavigatorParams, "EmployeeSalaryDetails">>();
 
   const [tab, setTab] = useState("Attendance");
+  
+console.log("🔥 EmployeeSalaryDetails employeeId:", employeeId); // 👈 YE LINE ADD KARO
 
   return (
     <SafeView>

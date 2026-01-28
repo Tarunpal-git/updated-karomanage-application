@@ -1153,11 +1153,11 @@ import { useQueryClient } from "@tanstack/react-query";
 import { apiUrls } from "../../../apis/urls";
 import { store } from "../../../app/store";
 
-const DURATION_YEAR_OPTIONS = Array.from({ length: 6 }, (_, i) => ({
+const DURATION_YEAR_OPTIONS = Array.from({ length: 5 }, (_, i) => ({
   label: `${i + 1} Year${i === 0 ? "" : "s"}`,
   value: `${i + 1}`,
 }));
-const DURATION_MONTH_OPTIONS = Array.from({ length: 12 }, (_, i) => ({
+const DURATION_MONTH_OPTIONS = Array.from({ length: 11 }, (_, i) => ({
   label: `${i + 1} Month${i === 0 ? "" : "s"}`,
   value: `${i + 1}`,
 }));

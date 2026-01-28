@@ -86,3 +86,34 @@ const styles = StyleSheet.create({
     textTransform: "capitalize",
   },
 });
+
+
+
+
+
+
+
+// import React from "react";
+// import { Col, Row } from "react-native-easy-grid";
+// import ScalableText from "../../../../../@ui/scalable-text/ScalableText";
+
+// const CourseDetailRow = ({ course }) => {
+//   return (
+//     <Row style={{ paddingVertical: 15 }}>
+//       <Col size={25}>
+//         <ScalableText>{course.courseName}</ScalableText>
+//       </Col>
+//       <Col size={25}>
+//         <ScalableText>{course.courseFee}</ScalableText>
+//       </Col>
+//       <Col size={30}>
+//         <ScalableText>{course.maxPaymentInstallment}</ScalableText>
+//       </Col>
+//       <Col size={20}>
+//         <ScalableText>{course.courseStatus}</ScalableText>
+//       </Col>
+//     </Row>
+//   );
+// };
+
+// export default CourseDetailRow;

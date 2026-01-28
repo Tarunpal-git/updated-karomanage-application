@@ -80,11 +80,11 @@ const PaymentDetails: FC<IPaymentDetails> = ({ details }) => {
         <Flex flexDirection="row" justify="space-between" align="center" styles={styles.cardHeader}>
           <Flex flexDirection="column">
             <ScalableText style={styles.cardTitle} fontFamily="Bold">
-              Course Overall Payment
+              Payment History
             </ScalableText>
-            <ScalableText style={styles.cardSubtitle} fontFamily="SemiBold">
+            {/* <ScalableText style={styles.cardSubtitle} fontFamily="SemiBold">
               {moment().format("MMMM DD, YYYY")}
-            </ScalableText>
+            </ScalableText> */}
           </Flex>
         </Flex>
         <Flex mt={15}>

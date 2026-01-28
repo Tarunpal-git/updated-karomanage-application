@@ -10,6 +10,7 @@ import { useStudentAdmissionMutation } from '../../../apis/hooks/students/mutati
 import SafeView from '../../../@ui/safe-view/SafeView';
 import AppHeader from '../../../@ui/app-header/AppHeader';
 import { COLORS } from '../../../colors';
+import RNPrint from 'react-native-print';
 
 const ReviewScreen = () => {
   const navigation = useNavigation<any>();
@@ -365,9 +366,419 @@ const ReviewScreen = () => {
     navigation.goBack();
   };
 
-  const onPrint = () => {
-    // Handle print functionality
-    console.log('Print functionality');
+  const onPrint = async () => {
+    try {
+      // Format date helper
+      const formatDateForPrint = (dateValue: any) => {
+        if (!dateValue || dateValue === "" || dateValue === null || dateValue === undefined) {
+          return "";
+        }
+        try {
+          let date: Date;
+          if (dateValue instanceof Date) {
+            date = dateValue;
+          } else if (typeof dateValue === 'string') {
+            date = new Date(dateValue);
+            if (isNaN(date.getTime())) {
+              return String(dateValue);
+            }
+          } else {
+            return String(dateValue);
+          }
+          const day = String(date.getDate()).padStart(2, '0');
+          const month = String(date.getMonth() + 1).padStart(2, '0');
+          const year = date.getFullYear();
+          return `${day}/${month}/${year}`;
+        } catch (error) {
+          return String(dateValue);
+        }
+      };
+
+      // Helper function to get field value
+      const getFieldValue = (value: any) => {
+        if (value === null || value === undefined || value === '') {
+          return '-';
+        }
+        return String(value);
+      };
+
+      // Current date and time
+      const currentDate = new Date();
+      const formattedDate = currentDate.toLocaleDateString('en-GB', { 
+        day: '2-digit', 
+        month: '2-digit', 
+        year: 'numeric' 
+      });
+      const formattedTime = currentDate.toLocaleTimeString('en-GB', { 
+        hour: '2-digit', 
+        minute: '2-digit' 
+      });
+
+      // Format custom fields
+      const formatCustomFields = () => {
+        if (!data.dynamicFields || data.dynamicFields.length === 0) {
+          return '';
+        }
+        const fieldsWithValues = data.dynamicFields.filter((field: any) => {
+          if (field.type === 'Media') {
+            return field.mediaUri || (field.value && field.value.trim() !== '');
+          } else {
+            return field.value && field.value.trim() !== '';
+          }
+        });
+        
+        if (fieldsWithValues.length === 0) return '';
+        
+        return fieldsWithValues.map((field: any) => {
+          const fieldValue = field.type === 'Media' 
+            ? (field.mediaUri ? 'File Selected' : getFieldValue(field.value))
+            : getFieldValue(field.value);
+          return `
+            <div class="row">
+              <span class="label">${field.fieldName}:</span>
+              <span class="value">${fieldValue}</span>
+            </div>`;
+        }).join('');
+      };
+
+      // Format installment details
+      const formatInstallments = () => {
+        if (numberOfInstallments === 1) {
+          const paymentStatus = (data as any).paymentStatus === 'paid' ? 'Paid' : 'Due';
+          const paymentAmount = (() => {
+            if (gstRuleData && gstRuleData.inclusionType === 'excluded') {
+              const baseAmount = (data as any).paymentAfterDiscount || totalPayment;
+              return `₹ ${baseAmount.toLocaleString('en-IN')}.00`;
+            } else {
+              return finalAmount ? `₹ ${finalAmount.toLocaleString('en-IN')}.00` : '-';
+            }
+          })();
+          
+          return `
+            <div class="row">
+              <span class="label">Date:</span>
+              <span class="value">${formatDateForPrint((data as any).paymentDate)}</span>
+            </div>
+            <div class="row">
+              <span class="label">Amount:</span>
+              <span class="value">${paymentAmount}</span>
+            </div>
+            <div class="row">
+              <span class="label">Payment Status:</span>
+              <span class="value">${paymentStatus}</span>
+            </div>
+            <div class="row">
+              <span class="label">Description:</span>
+              <span class="value">${getFieldValue((data as any).description)}</span>
+            </div>`;
+        }
+        
+        if ((data as any).installments && (data as any).installments.length > 0) {
+          return (data as any).installments.map((installment: any, index: number) => {
+            const installmentAmount = (() => {
+              if (gstRuleData && gstRuleData.inclusionType === 'excluded') {
+                const baseAmount = (data as any).paymentAfterDiscount || totalPayment;
+                return `₹ ${baseAmount.toLocaleString('en-IN')}.00`;
+              } else {
+                return installment.amount ? `₹ ${installment.amount.toLocaleString('en-IN')}.00` : '-';
+              }
+            })();
+            
+            return `
+              <div class="installment-section">
+                <div class="installment-title">Installment ${index + 1}</div>
+                <div class="row">
+                  <span class="label">Date:</span>
+                  <span class="value">${formatDateForPrint(installment.date)}</span>
+                </div>
+                <div class="row">
+                  <span class="label">Amount:</span>
+                  <span class="value">${installmentAmount}</span>
+                </div>
+                <div class="row">
+                  <span class="label">Payment Status:</span>
+                  <span class="value">${installment.status || (index === 0 ? 'Due' : 'Pending')}</span>
+                </div>
+                <div class="row">
+                  <span class="label">Description:</span>
+                  <span class="value">${getFieldValue(installment.description)}</span>
+                </div>
+              </div>`;
+          }).join('');
+        }
+        
+        return '';
+      };
+
+      // HTML content for print
+      const htmlContent = `
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <meta charset="UTF-8">
+            <title>Student Review Page</title>
+            <style>
+              @media print {
+                body { margin: 0; }
+                .no-print { display: none; }
+              }
+              body {
+                font-family: Arial, sans-serif;
+                padding: 20px;
+                color: #000;
+              }
+              .header {
+                text-align: center;
+                margin-bottom: 30px;
+                border-bottom: 2px solid #000;
+                padding-bottom: 15px;
+              }
+              .header h1 {
+                margin: 0;
+                font-size: 24px;
+                font-weight: bold;
+              }
+              .header p {
+                margin: 5px 0;
+                font-size: 14px;
+              }
+              .section {
+                margin-bottom: 25px;
+                page-break-inside: avoid;
+              }
+              .section-title {
+                font-weight: bold;
+                font-size: 18px;
+                margin-bottom: 15px;
+                border-bottom: 1px solid #ccc;
+                padding-bottom: 5px;
+              }
+              .row {
+                display: flex;
+                margin-bottom: 8px;
+                font-size: 14px;
+              }
+              .label {
+                font-weight: bold;
+                width: 220px;
+                min-width: 220px;
+              }
+              .value {
+                flex: 1;
+                word-wrap: break-word;
+              }
+              .installment-section {
+                margin-bottom: 15px;
+                padding-left: 20px;
+                border-left: 2px solid #ccc;
+              }
+              .installment-title {
+                font-weight: bold;
+                font-size: 16px;
+                margin-bottom: 10px;
+                color: #333;
+              }
+              .footer {
+                margin-top: 40px;
+                text-align: center;
+                font-size: 12px;
+                color: #666;
+                border-top: 1px solid #ccc;
+                padding-top: 15px;
+              }
+              .url {
+                margin-top: 10px;
+                font-size: 11px;
+                color: #999;
+              }
+            </style>
+          </head>
+          <body>
+            <div class="header">
+              <h1>Student Review Page</h1>
+              <p>Karomanage</p>
+              <p>${formattedDate}, ${formattedTime}</p>
+            </div>
+            
+            <div class="section">
+              <div class="section-title">Student Personal Details</div>
+              <div class="row">
+                <span class="label">Full Name:</span>
+                <span class="value">${getFieldValue(`${data.studentFirstName || ''} ${data.studentLastName || ''}`.trim())}</span>
+              </div>
+              <div class="row">
+                <span class="label">Enrollment Number:</span>
+                <span class="value">${getFieldValue(data.studentEnrollmentNumber)}</span>
+              </div>
+              <div class="row">
+                <span class="label">Email:</span>
+                <span class="value">${getFieldValue(data.studentEmail)}</span>
+              </div>
+              <div class="row">
+                <span class="label">Mobile Number:</span>
+                <span class="value">${getFieldValue(data.studentContact)}</span>
+              </div>
+              <div class="row">
+                <span class="label">Date of Birth:</span>
+                <span class="value">${formatDateForPrint(data.studentDateOfBirth)}</span>
+              </div>
+              <div class="row">
+                <span class="label">Date of Admission:</span>
+                <span class="value">${formatDateForPrint(data.dateOfAdmission)}</span>
+              </div>
+              <div class="row">
+                <span class="label">Father's Name:</span>
+                <span class="value">${getFieldValue(data.studentFatherName)}</span>
+              </div>
+              <div class="row">
+                <span class="label">Father's Number:</span>
+                <span class="value">${getFieldValue(data.studentFatherContact)}</span>
+              </div>
+              <div class="row">
+                <span class="label">Address:</span>
+                <span class="value">${getFieldValue(data.studentAddress)}</span>
+              </div>
+              <div class="row">
+                <span class="label">Gender:</span>
+                <span class="value">${getFieldValue(data.studentGender)}</span>
+              </div>
+              <div class="row">
+                <span class="label">Referred By:</span>
+                <span class="value">${getFieldValue(data.referedBy)}</span>
+              </div>
+            </div>
+            
+            ${data.dynamicFields && data.dynamicFields.length > 0 && data.dynamicFields.filter((field: any) => {
+              if (field.type === 'Media') {
+                return field.mediaUri || (field.value && field.value.trim() !== '');
+              } else {
+                return field.value && field.value.trim() !== '';
+              }
+            }).length > 0 ? `
+            <div class="section">
+              <div class="section-title">Custom Fields</div>
+              ${formatCustomFields()}
+            </div>
+            ` : ''}
+            
+            ${(data.state || data.city || data.collegeName || data.collegeCourse || data.collegeSemester || data.departmentName) ? `
+            <div class="section">
+              <div class="section-title">College Details</div>
+              <div class="row">
+                <span class="label">State:</span>
+                <span class="value">${getFieldValue(data.state)}</span>
+              </div>
+              <div class="row">
+                <span class="label">City:</span>
+                <span class="value">${getFieldValue(data.city)}</span>
+              </div>
+              <div class="row">
+                <span class="label">College Name:</span>
+                <span class="value">${getFieldValue(data.collegeName)}</span>
+              </div>
+              <div class="row">
+                <span class="label">College Course:</span>
+                <span class="value">${getFieldValue(data.collegeCourse)}</span>
+              </div>
+              <div class="row">
+                <span class="label">College Semester:</span>
+                <span class="value">${getFieldValue(data.collegeSemester)}</span>
+              </div>
+              <div class="row">
+                <span class="label">Department Name:</span>
+                <span class="value">${getFieldValue(data.departmentName)}</span>
+              </div>
+            </div>
+            ` : ''}
+            
+            <div class="section">
+              <div class="section-title">Course & Batch Details</div>
+              <div class="row">
+                <span class="label">Course Name:</span>
+                <span class="value">${getFieldValue(data.course)}</span>
+              </div>
+              <div class="row">
+                <span class="label">Course Fee:</span>
+                <span class="value">${data.courseFee ? `₹ ${data.courseFee.toLocaleString('en-IN')}.00` : '-'}</span>
+              </div>
+              <div class="row">
+                <span class="label">Batch Name:</span>
+                <span class="value">${getFieldValue(data.batch)}</span>
+              </div>
+            </div>
+            
+            <div class="section">
+              <div class="section-title">Payment Details</div>
+              <div class="row">
+                <span class="label">Part Payment:</span>
+                <span class="value">${data.partPayment === 'yes' ? 'Yes' : 'No'}</span>
+              </div>
+              <div class="row">
+                <span class="label">Coupon Name:</span>
+                <span class="value">${(() => {
+                  if (!data.coupon || data.coupon === '') return '-';
+                  if (typeof data.coupon === 'object' && data.coupon.couponName) return data.coupon.couponName;
+                  if (typeof data.coupon === 'object' && data.coupon.label) return data.coupon.label;
+                  if (typeof data.coupon === 'string') return data.coupon;
+                  return '-';
+                })()}</span>
+              </div>
+              <div class="row">
+                <span class="label">Course Fee:</span>
+                <span class="value">${totalPayment ? `₹ ${totalPayment.toLocaleString('en-IN')}.00` : '-'}</span>
+              </div>
+              <div class="row">
+                <span class="label">Discount Offered:</span>
+                <span class="value">${discountAmount ? `₹ ${discountAmount.toLocaleString('en-IN')}.00` : '-'}</span>
+              </div>
+              <div class="row">
+                <span class="label">Total:</span>
+                <span class="value">${(data as any).paymentAfterDiscount ? `₹ ${(data as any).paymentAfterDiscount.toLocaleString('en-IN')}.00` : (totalPayment ? `₹ ${totalPayment.toLocaleString('en-IN')}.00` : '-')}</span>
+              </div>
+              ${gstRuleData && gstRuleData.inclusionType === 'excluded' && gstRuleData.cgstEnabled ? `
+              <div class="row">
+                <span class="label">CGST:</span>
+                <span class="value">₹ ${((data as any).cgstAmount || 0).toLocaleString('en-IN')}.00 (${gstRuleData.cgstPercentage}%)</span>
+              </div>
+              ` : ''}
+              ${gstRuleData && gstRuleData.inclusionType === 'excluded' && gstRuleData.sgstEnabled ? `
+              <div class="row">
+                <span class="label">SGST:</span>
+                <span class="value">₹ ${((data as any).sgstAmount || 0).toLocaleString('en-IN')}.00 (${gstRuleData.sgstPercentage}%)</span>
+              </div>
+              ` : ''}
+              ${gstRuleData && gstRuleData.inclusionType === 'excluded' ? `
+              <div class="row">
+                <span class="label">Grand Total:</span>
+                <span class="value">${(data as any).paymentAfterGST ? `₹ ${(data as any).paymentAfterGST.toLocaleString('en-IN')}.00` : '-'}</span>
+              </div>
+              ` : ''}
+            </div>
+            
+            ${numberOfInstallments > 1 || numberOfInstallments === 1 ? `
+            <div class="section">
+              <div class="section-title">Installment Details</div>
+              ${formatInstallments()}
+            </div>
+            ` : ''}
+            
+            <div class="footer">
+              <div class="url">https://portal.karomanage.com/student/studentRegistration/</div>
+              <p>© ${currentDate.getFullYear()} Karomanage Powered by Bytomanage Innovation Private Limited</p>
+            </div>
+          </body>
+        </html>
+      `;
+
+      // Print dialog open karo
+      await RNPrint.print({
+        html: htmlContent
+      });
+      
+    } catch (error) {
+      console.error('Print error:', error);
+      Alert.alert('Error', 'Failed to print. Please try again.');
+    }
   };
 
   // Calculate payment details
@@ -436,9 +847,9 @@ const ReviewScreen = () => {
               >
               <View style={styles.reviewHeader}>
         
-                <ScalableText style={styles.stepIndicator} fontFamily="Regular">
-                  Check Your Filled Details
-                </ScalableText>
+                {/* <ScalableText style={styles.stepIndicator} fontFamily="Regular">
+                  Check Your Filled Detail
+                </ScalableText> */}
               </View>
               
               {/* Student Personal Details Section */}
@@ -500,7 +911,6 @@ const ReviewScreen = () => {
                 'Course Name': data.course,
                 'Course Fee': data.courseFee ? `₹ ${data.courseFee.toLocaleString('en-IN')}.00` : '-',
                 'Batch Name': data.batch,
-                'Batch Mode': data.batchMode,
               }, '📚')}
 
               {/* Payment Details Section */}
