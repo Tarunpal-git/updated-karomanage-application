@@ -415,7 +415,7 @@
 // }); 
 
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import SafeView from "../../../@ui/safe-view/SafeView";
 import AppHeader from "../../../@ui/app-header/AppHeader";
 import { useNavigation } from "@react-navigation/native";
@@ -435,6 +435,7 @@ import ThemeScrollView from "../../../@ui/theme-scroll-view/ThemeScrollView";
 import { useQueryClient } from "@tanstack/react-query";
 import { apiUrls } from "../../../apis/urls";
 import moment from "moment";
+import { useCourseListsQuery } from "../../../apis/hooks/course/query/useCourseLists.query";
 
 interface UpdateBatchProps {
   batchData: any;
@@ -507,6 +508,64 @@ const UpdateBatch = ({ batchData, onClose }: UpdateBatchProps) => {
   
   const { mutateAsync, isPending } = useUpdateBatchMutation();
   const queryClient = useQueryClient();
+  const { data: courseData } = useCourseListsQuery();
+
+  // Function to calculate end date from start date and course duration (in months)
+  const calculateEndDateFromDuration = (startDateStr: string, durationMonths: number): string | null => {
+    if (!startDateStr || !durationMonths) return null;
+    
+    try {
+      // Parse start date (format: YYYY-MM-DD)
+      const startDate = new Date(startDateStr);
+      if (isNaN(startDate.getTime())) return null;
+      
+      // Create a new date object to avoid mutating the original
+      const endDate = new Date(startDate);
+      
+      // Add months to the start date
+      endDate.setMonth(endDate.getMonth() + durationMonths);
+      
+      // Format date in YYYY-MM-DD format for CalendarInput
+      const year = endDate.getFullYear();
+      const month = String(endDate.getMonth() + 1).padStart(2, '0');
+      const day = String(endDate.getDate()).padStart(2, '0');
+      
+      return `${year}-${month}-${day}`;
+    } catch (error) {
+      console.error('Error calculating end date:', error);
+      return null;
+    }
+  };
+
+  // Automatically calculate and update end date when start date changes
+  useEffect(() => {
+    const startDate = handler.watch('batchStartDate');
+    const courseId = handler.watch('courseId');
+    
+    // Only auto-calculate if both start date and course are selected
+    if (startDate && courseId && courseData?.data) {
+      const selectedCourse = courseData.data.find((course: any) => course.courseId === courseId);
+      
+      if (selectedCourse && selectedCourse.courseDuration) {
+        // Calculate end date from start date + course duration
+        const calculatedEndDate = calculateEndDateFromDuration(startDate, selectedCourse.courseDuration);
+        
+        if (calculatedEndDate) {
+          console.log('=== AUTO CALCULATING END DATE (UPDATE) ===');
+          console.log('Start Date:', startDate);
+          console.log('Course Duration (months):', selectedCourse.courseDuration);
+          console.log('Calculated End Date:', calculatedEndDate);
+          console.log('=== END AUTO CALCULATION ===');
+          
+          // Update the end date field
+          handler.setValue('batchEndDate', calculatedEndDate, { 
+            shouldValidate: true,
+            shouldDirty: true 
+          });
+        }
+      }
+    }
+  }, [handler.watch('batchStartDate'), handler.watch('courseId'), courseData]);
 
   const onSubmit: Parameters<typeof handler.handleSubmit>[0] = async (values) => {
     // Check if any fields have been modified
@@ -641,11 +700,27 @@ const UpdateBatch = ({ batchData, onClose }: UpdateBatchProps) => {
               <ScalableText style={styles.inputLabel} fontFamily="Medium">
                 Batch End Date*
               </ScalableText>
-              <CalendarInput
-                label="Select end date"
-                handler={handler}
-                name="batchEndDate"
-              />
+              {(() => {
+                const courseId = handler.watch('courseId');
+                const selectedCourse = courseData?.data?.find((course: any) => course.courseId === courseId);
+                const hasCourseDuration = selectedCourse?.courseDuration && selectedCourse.courseDuration > 0;
+                
+                return (
+                  <>
+                    <CalendarInput
+                      label="Select end date"
+                      handler={handler}
+                      name="batchEndDate"
+                      disabled={hasCourseDuration}
+                    />
+                    {hasCourseDuration && (
+                      <ScalableText style={styles.helperText} fontFamily="Regular">
+                        End date is automatically calculated based on course duration. It will adjust when you change the start date.
+                      </ScalableText>
+                    )}
+                  </>
+                );
+              })()}
             </View>
 
             <View style={styles.inputSpacing}>
@@ -678,6 +753,14 @@ const UpdateBatch = ({ batchData, onClose }: UpdateBatchProps) => {
                     options={TIME_OPTIONS}
                     value={handler.watch("batchClassStartTime") ? { label: handler.watch("batchClassStartTime") || "", value: handler.watch("batchClassStartTime") || "" } : { label: "", value: "" }}
                     dropdownButtonStyle={styles.inputContainer}
+                    onChangeValue={(selectedValue: string) => {
+                      handler.setValue('batchClassStartTime', selectedValue, { 
+                        shouldValidate: true,
+                        shouldDirty: true 
+                      });
+                      // Trigger validation of end time when start time changes
+                      handler.trigger('batchClassEndTime');
+                    }}
                   />
                 </View>
                 <View style={styles.inputSpacing}>
@@ -691,6 +774,12 @@ const UpdateBatch = ({ batchData, onClose }: UpdateBatchProps) => {
                     options={TIME_OPTIONS}
                     value={handler.watch("batchClassEndTime") ? { label: handler.watch("batchClassEndTime") || "", value: handler.watch("batchClassEndTime") || "" } : { label: "", value: "" }}
                     dropdownButtonStyle={styles.inputContainer}
+                    onChangeValue={(selectedValue: string) => {
+                      handler.setValue('batchClassEndTime', selectedValue, { 
+                        shouldValidate: true,
+                        shouldDirty: true 
+                      });
+                    }}
                   />
                 </View>
               </>
@@ -844,6 +933,13 @@ const styles = StyleSheet.create({
   },
   inputContainer: {
     marginTop: 8,
+  },
+  helperText: {
+    fontSize: 12,
+    color: '#666',
+    marginTop: 4,
+    marginLeft: 4,
+    fontStyle: 'italic',
   },
 }); 
 

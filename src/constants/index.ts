@@ -84,6 +84,7 @@ export const TIME_TABLE_PREFIX = `/timeTable-fnp${
 export const CLASSROOM_PREFIX = `/classroom-fnp${
   AppConfig.REACT_APP_MODE === "prod" ? "-prod" : ""
 }/`;
+
  
 
 export const NOTIFICATION_HUB_PREFIX = `/notification-hub-fnp${
@@ -101,6 +102,9 @@ export const AGENT_MANAGEMENT_PREFIX = `/agent-management-fnp${
 export const LEAD_MANAGEMENT_PREFIX = `/leadManagement-fnp${
   AppConfig.REACT_APP_MODE === "prod" ? "-prod" : ""
 }/`;
+export const MANUAL_PREFIX = `/manual/paths/`;
+
+
 
 export const TESTING_STUDENT_DATA = [
   {

@@ -15,12 +15,14 @@ export const filteredStudentData = (
   }
 
   return data.filter((student) => {
+    const searchLower = search.toLowerCase();
     const matchesSearch =
       !search ||
-      student.studentFirstName.toLowerCase().includes(search.toLowerCase()) ||
-      student.studentLastName.toLowerCase().includes(search.toLowerCase()) ||
-      student.studentEmail.toLowerCase().includes(search.toLowerCase()) ||
-      student.studentContact.includes(search);
+      student.studentFirstName?.toLowerCase().includes(searchLower) ||
+      student.studentLastName?.toLowerCase().includes(searchLower) ||
+      student.studentEmail?.toLowerCase().includes(searchLower) ||
+      student.studentContact?.includes(search) ||
+      student.studentEnrollmentNumber?.toLowerCase().includes(searchLower);
 
     return matchesSearch;
   });

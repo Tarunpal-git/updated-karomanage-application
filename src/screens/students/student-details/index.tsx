@@ -85,7 +85,7 @@ const StudentDetails = () => {
   return (
     <SafeView>
       <AppHeader
-        title="Students Details"
+        title="Students Detail"
         handleBackClick={() => navigation.goBack()}
         leftSection={
           <ActionIcon
