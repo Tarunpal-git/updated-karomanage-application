@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, View, Dimensions, TouchableOpacity } from 'react-native';
+import { StyleSheet, View, Dimensions, TouchableOpacity, Alert } from 'react-native';
 import Button from '../../../@ui/button/Button';
 import ScalableText from '../../../@ui/scalable-text/ScalableText';
 import { useNavigation, useRoute } from '@react-navigation/native';
@@ -16,6 +16,8 @@ import AppHeader from '../../../@ui/app-header/AppHeader';
 import ThemeScrollView from '../../../@ui/theme-scroll-view/ThemeScrollView';
 import { COLORS } from '../../../colors';
 import { useListCouponsQuery } from '../../../apis/hooks/coupons/query/useListCoupons.query';
+import { useEmployeesListQuery } from '../../../apis/hooks/employee/query/useEmployeesList.query';
+import SelectDropdown from '../../../@ui/select-dropdown/SelectDropdown';
 import { store } from '../../../app/store';
 
 const PART_PAYMENT_OPTIONS = [
@@ -127,8 +129,17 @@ const PaymentDetailsScreen = () => {
   const [selectedCoupon, setSelectedCoupon] = useState<any>(null);
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
+  // Payment mode states
+  const [paymentMode, setPaymentMode] = useState<string>('');
+  const [paymentReceiverId, setPaymentReceiverId] = useState<string>('');
+  const [transactionId, setTransactionId] = useState<string>('');
+  const [availableEmployees, setAvailableEmployees] = useState<any[]>([]);
+  
   // Fetch coupons from API
   const { data: couponsData, isLoading: couponsLoading, refetch: refetchCoupons } = useListCouponsQuery();
+  
+  // Fetch employees from API
+  const { data: employeesData, isLoading: employeesLoading } = useEmployeesListQuery();
   
   // Get course fee from previous step data
   const courseFee = (data as any).courseFee || 0;
@@ -171,6 +182,7 @@ const PaymentDetailsScreen = () => {
       amount: (data as any).amount || finalCourseFee,
       description: (data as any).description || '',
       prevNumberOfInstallments: (data as any).numberOfInstallments || ((data as any).numberOfInstallments || '1'),
+      transactionId: (data as any).transactionId || '',
     }, 
     // Temporarily disable validation resolver to prevent automatic validation
     // resolver: yupResolver(paymentDetailsValidation),
@@ -487,6 +499,52 @@ const PaymentDetailsScreen = () => {
       console.log('🎫 Coupons loaded from API:', couponOptions);
     }
   }, [couponsData]);
+  
+  // Convert API employee data to dropdown options
+  useEffect(() => {
+    if (employeesData?.data && employeesData.data.length > 0) {
+      const employeeOptions = employeesData.data.map((employee: any) => {
+        const firstName = employee?.employeePersonalDetails?.employeeFirstname || employee.employeeFirstName || '';
+        const lastName = employee?.employeePersonalDetails?.employeeLastname || employee.employeeLastName || '';
+        const displayName = `${firstName} ${lastName}`.trim();
+        const employeeId = employee.employeeId || employee.id;
+        
+        return {
+          label: `${displayName} (${employeeId})`,
+          value: employeeId,
+          employeeData: employee
+        };
+      });
+      setAvailableEmployees(employeeOptions);
+      console.log('👥 Employees loaded from API:', employeeOptions);
+    }
+  }, [employeesData]);
+  
+  // Initialize payment mode fields from context data
+  useEffect(() => {
+    if ((data as any).paymentMode) {
+      setPaymentMode((data as any).paymentMode);
+    }
+    if ((data as any).paymentReceiverId) {
+      setPaymentReceiverId((data as any).paymentReceiverId);
+    }
+    if ((data as any).transactionId) {
+      setTransactionId((data as any).transactionId);
+    }
+    // Also check in installments array for first installment
+    if ((data as any).installments && Array.isArray((data as any).installments) && (data as any).installments.length > 0) {
+      const firstInstallment = (data as any).installments[0];
+      if (firstInstallment.paymentMode) {
+        setPaymentMode(firstInstallment.paymentMode);
+      }
+      if (firstInstallment.paymentRecieverId) {
+        setPaymentReceiverId(firstInstallment.paymentRecieverId);
+      }
+      if (firstInstallment.transactionId) {
+        setTransactionId(firstInstallment.transactionId);
+      }
+    }
+  }, [data]);
 
   // Clear validation errors when fields change
   useEffect(() => {
@@ -957,6 +1015,22 @@ const PaymentDetailsScreen = () => {
       return; // Error will be shown by UI validation
     }
     
+    // Validate payment mode fields if paying first installment
+    if (values.firstInstallment === 'pay') {
+      if (!paymentMode) {
+        Alert.alert('Error', 'Please select payment mode for first installment');
+        return;
+      }
+      if (paymentMode === 'cash' && !paymentReceiverId) {
+        Alert.alert('Error', 'Please select payment receiver for cash payment');
+        return;
+      }
+      if (paymentMode === 'online' && !transactionId) {
+        Alert.alert('Error', 'Please enter transaction ID for online payment');
+        return;
+      }
+    }
+    
     // Validate payment date for full payment
     if (partPayment === 'no' && !values.paymentDate) {
       handler.setError('paymentDate', { type: 'required', message: 'Payment date is required' });
@@ -1016,6 +1090,12 @@ const PaymentDetailsScreen = () => {
       description: values.description || '',
       // Add payment status based on firstInstallment selection
       paymentStatus: (values.firstInstallment === 'pay' ? 'paid' : 'due') as 'paid' | 'due',
+      // Add payment mode fields if paying first installment
+      ...(values.firstInstallment === 'pay' && {
+        paymentMode: paymentMode || '',
+        paymentReceiverId: paymentMode === 'cash' ? paymentReceiverId : '',
+        transactionId: paymentMode === 'online' ? transactionId : '',
+      }),
       // Add installment details if part payment
       ...(values.partPayment === 'yes' && {
         installments: Array.from({ length: parseInt(values.numberOfInstallments) || 1 }, (_, index) => ({
@@ -1023,7 +1103,13 @@ const PaymentDetailsScreen = () => {
           date: values[`installmentDate${index + 1}`] || null,
           amount: values[`installmentAmount${index + 1}`] || 0,
           // Set status based on firstInstallment selection
-          status: (index === 0 && values.firstInstallment === 'pay') ? ('paid' as const) : ('due' as const)
+          status: (index === 0 && values.firstInstallment === 'pay') ? ('paid' as const) : ('due' as const),
+          // Add payment mode fields for first installment if paying
+          ...(index === 0 && values.firstInstallment === 'pay' && {
+            paymentMode: paymentMode || '',
+            paymentRecieverId: paymentMode === 'cash' ? paymentReceiverId : '',
+            transactionId: paymentMode === 'online' ? transactionId : '',
+          })
         }))
       })
     };
@@ -1475,6 +1561,113 @@ const PaymentDetailsScreen = () => {
                 </ScalableText>
               )}
             </View>
+            
+            {/* Payment Mode Fields - Only show if paying first installment */}
+            {handler.watch('firstInstallment') === 'pay' && (
+              <View style={styles.inputSpacing}>
+                <ScalableText style={styles.inputLabel} fontFamily="Medium">
+                  Mode of Payment for Paid Installment *
+                </ScalableText>
+                
+                {/* Payment Mode Selection */}
+                <View style={styles.paymentModeContainer}>
+                  <TouchableOpacity
+                    style={[
+                      styles.paymentModeButton,
+                      paymentMode === 'cash' && styles.paymentModeButtonActive
+                    ]}
+                    onPress={() => {
+                      setPaymentMode('cash');
+                      // Clear transaction ID when switching to cash
+                      setTransactionId('');
+                    }}
+                  >
+                    <ScalableText
+                      style={paymentMode === 'cash' 
+                        ? styles.paymentModeButtonTextActive 
+                        : styles.paymentModeButtonText
+                      }
+                      fontFamily="Medium"
+                    >
+                      Cash
+                    </ScalableText>
+                  </TouchableOpacity>
+                  
+                  <TouchableOpacity
+                    style={[
+                      styles.paymentModeButton,
+                      paymentMode === 'online' && styles.paymentModeButtonActive
+                    ]}
+                    onPress={() => {
+                      setPaymentMode('online');
+                      // Clear payment receiver when switching to online
+                      setPaymentReceiverId('');
+                    }}
+                  >
+                    <ScalableText
+                      style={paymentMode === 'online' 
+                        ? styles.paymentModeButtonTextActive 
+                        : styles.paymentModeButtonText
+                      }
+                      fontFamily="Medium"
+                    >
+                      Online
+                    </ScalableText>
+                  </TouchableOpacity>
+                </View>
+                
+                {/* Payment Received By - Only show for cash mode */}
+                {paymentMode === 'cash' && (
+                  <View style={styles.inputSpacing}>
+                    <ScalableText style={styles.inputLabel} fontFamily="Medium">
+                      Payment Received By *
+                    </ScalableText>
+                    <SelectDropdown
+                      label="Select employee"
+                      onChange={(value) => setPaymentReceiverId(value)}
+                      options={employeesLoading ? [{ label: 'Loading employees...', value: '' }] : availableEmployees}
+                      value={availableEmployees.find(emp => emp.value === paymentReceiverId)}
+                      dropdownButtonStyle={styles.inputContainer}
+                    />
+                    {hasSubmitted && paymentMode === 'cash' && !paymentReceiverId && (
+                      <ScalableText style={styles.errorText} fontFamily="Regular">
+                        Payment receiver is required for cash payment
+                      </ScalableText>
+                    )}
+                  </View>
+                )}
+                
+                {/* Transaction ID - Only show for online mode */}
+                {paymentMode === 'online' && (
+                  <View style={styles.inputSpacing}>
+                    <ScalableText style={styles.inputLabel} fontFamily="Medium">
+                      Transaction ID *
+                    </ScalableText>
+                    <Input
+                      handler={handler}
+                      name="transactionId"
+                      label=""
+                      containerStyles={styles.inputContainer}
+                      placeholder="Enter transaction ID"
+                      value={transactionId}
+                      onChangeText={(text) => setTransactionId(text)}
+                    />
+                    {hasSubmitted && paymentMode === 'online' && !transactionId && (
+                      <ScalableText style={styles.errorText} fontFamily="Regular">
+                        Transaction ID is required for online payment
+                      </ScalableText>
+                    )}
+                  </View>
+                )}
+                
+                {/* Show error if payment mode not selected */}
+                {hasSubmitted && handler.watch('firstInstallment') === 'pay' && !paymentMode && (
+                  <ScalableText style={styles.errorText} fontFamily="Regular">
+                    Payment mode is required
+                  </ScalableText>
+                )}
+              </View>
+            )}
             
             <View style={styles.inputSpacing}>
               <ScalableText style={styles.inputLabel} fontFamily="Medium">
@@ -2091,6 +2284,40 @@ const styles = StyleSheet.create({
     marginTop: 4,
     marginLeft: 4,
     fontFamily: "Poppins-Regular",
+  },
+  paymentModeContainer: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 8,
+  },
+  paymentModeButton: {
+    flex: 1,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#E8E8E8',
+    backgroundColor: COLORS.white,
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+  },
+  paymentModeButtonActive: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
+  },
+  paymentModeButtonText: {
+    fontSize: 15,
+    color: COLORS.textSecondary,
+    fontFamily: "Poppins-Medium",
+  },
+  paymentModeButtonTextActive: {
+    color: COLORS.white,
+    fontFamily: "Poppins-SemiBold",
   },
 });
 

@@ -52,7 +52,27 @@ const DateInput: FC<IDateInput> = ({
                 fontFamily="Regular"
                 style={{ ...styles.textInput, ...inputTextStyles }}
               >
-                {value && value !== null && value !== "" ? moment(value).format("DD-MM-YY") : label}
+                {(() => {
+                  if (!value || value === null || value === '') return label;
+                  try {
+                    // If value is already a Date object
+                    if (value instanceof Date) {
+                      return isNaN(value.getTime()) ? label : moment(value).format("DD-MM-YY");
+                    }
+                    // If value is a string, try to parse it
+                    if (typeof value === 'string') {
+                      const parsed = moment(value, ['DD-MM-YYYY', 'DD-MM-YY', 'DD/MM/YYYY', 'DD/MM/YY', 'YYYY-MM-DD', moment.ISO_8601], true);
+                      if (parsed.isValid()) {
+                        return parsed.format("DD-MM-YY");
+                      }
+                    }
+                    // Try standard Date parsing
+                    const date = new Date(value);
+                    return isNaN(date.getTime()) ? label : moment(date).format("DD-MM-YY");
+                  } catch (e) {
+                    return label;
+                  }
+                })()}
               </ScalableText>
             </TouchableOpacity>
             {fieldState.error && (
@@ -74,7 +94,29 @@ const DateInput: FC<IDateInput> = ({
               mode="date"
               modal
               open={picker}
-              date={value && value !== null ? new Date(value) : (maximumDate || new Date())}
+              date={(() => {
+                if (value && value !== null && value !== '') {
+                  try {
+                    // If value is already a Date object
+                    if (value instanceof Date) {
+                      return isNaN(value.getTime()) ? (maximumDate || new Date()) : value;
+                    }
+                    // If value is a string, try to parse it
+                    if (typeof value === 'string') {
+                      const parsed = moment(value, ['DD-MM-YYYY', 'DD-MM-YY', 'DD/MM/YYYY', 'DD/MM/YY', 'YYYY-MM-DD', moment.ISO_8601], true);
+                      if (parsed.isValid()) {
+                        return parsed.toDate();
+                      }
+                    }
+                    // Try standard Date parsing
+                    const date = new Date(value);
+                    return isNaN(date.getTime()) ? (maximumDate || new Date()) : date;
+                  } catch (e) {
+                    return maximumDate || new Date();
+                  }
+                }
+                return maximumDate || new Date();
+              })()}
               onConfirm={(date) => {
                 setPicker(false);
                 onChange(date);

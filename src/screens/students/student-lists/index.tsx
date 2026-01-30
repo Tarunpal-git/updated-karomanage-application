@@ -344,6 +344,7 @@ import ScalableText from "../../../@ui/scalable-text/ScalableText";
 import Button from "../../../@ui/button/Button";
 import PaymentRestrictionNotice from "../../../@ui/restriction/PaymentRestrictionNotice";
 import { hasCreatePermission, hasOnlyReadPermission } from "../../../utils/fetchPermissionsTitle";
+import { COLORS } from "../../../colors";
 
 const StudentLists = () => {
   const navigation = useNavigation<TScreenNavigator>();
@@ -353,12 +354,20 @@ const StudentLists = () => {
   const { data: courseData } = useCourseListsQuery();
   const { data: batchData } = useBatchListsQuery();
 
+  // Helper function to capitalize first letter of first word
+  const capitalizeFirstWord = (text: string): string => {
+    if (!text) return '';
+    const trimmed = text.trim();
+    if (trimmed.length === 0) return '';
+    return trimmed.charAt(0).toUpperCase() + trimmed.slice(1);
+  };
+
   // getting select values for course data
 
   const COURSES_LIST: TSelectOptions[] = useMemo(() => {
     if (courseData && courseData.statusCode === 200 && Array.isArray(courseData.data)) {
       return courseData.data.map((course: TCourseData) => ({
-        label: course.courseName,
+        label: capitalizeFirstWord(course.courseName),
         value: course.courseId,
       }));
     }
@@ -367,10 +376,13 @@ const StudentLists = () => {
 
   const BATCHES_LIST: TSelectOptions[] = useMemo(() => {
     if (batchData && batchData.statusCode === 200 && Array.isArray(batchData.data)) {
-      return batchData.data.map((batch: TBatchData) => ({
-        label: batch.batchName,
-        value: batch.batchId,
-      }));
+      return batchData.data
+        .filter((batch: TBatchData) => batch && batch.batchId && batch.batchName)
+        .map((batch: TBatchData) => ({
+          label: batch.batchName || "",
+          value: batch.batchId,
+          courses: Array.isArray(batch.courses) ? batch.courses : [], // Store all courses for filtering
+        }));
     }
     return [];
   }, [batchData]);
@@ -379,9 +391,30 @@ const StudentLists = () => {
     search: "",
     studentStatus: "",
     paymentStatus: "",
+    paymentMode: "",
+    paymentDateStart: "",
+    paymentDateEnd: "",
+    admissionDateStart: "",
+    admissionDateEnd: "",
     courseName: "",
     batchName: "",
   });
+
+  // Filter batches based on selected course
+  const FILTERED_BATCHES_LIST: TSelectOptions[] = useMemo(() => {
+    if (!filters.courseName) {
+      return []; // No batches shown when no course is selected
+    }
+    return BATCHES_LIST.filter((batch: any) => {
+      // Check if batch belongs to selected course by checking if any course in batch.courses matches
+      if (!batch || !batch.courses || !Array.isArray(batch.courses) || batch.courses.length === 0) {
+        return false;
+      }
+      return batch.courses.some((course: any) => {
+        return course && course.courseId && course.courseId === filters.courseName;
+      });
+    });
+  }, [BATCHES_LIST, filters.courseName]);
 
   const [visibleColumns, setVisibleColumns] = useState<
     { label: string; key: string }[]
@@ -389,6 +422,9 @@ const StudentLists = () => {
     { label: "Student Enrollment", key: "studentEnrollment" },
     { label: "Student Name", key: "studentName" },
     { label: "Mobile Number", key: "studentContact" },
+    { label: "Email", key: "studentEmail" },
+    { label: "Student Status", key: "studentStatus" },
+    { label: "Payment Status", key: "paymentStatus" },
   ]);
 
   const tableColumns = useMemo(() => {
@@ -413,17 +449,97 @@ const StudentLists = () => {
         </Flex>
       ),
     });
+
+    // Add Payment Status column
+    columns.push({
+      key: "paymentStatus",
+      field: "paymentStatus",
+      label: "Payment Status",
+      minWidth: 120,
+      renderCell: (row) => {
+        try {
+          // Payment status from student filter list v2 API - check in order:
+          // 1. Direct paymentStatus field
+          // 2. Direct allPaymentStatus field (from API response)
+          // 3. allPaymentDetails.allPaymentStatus (fallback)
+          const paymentStatus = row?.paymentStatus || row?.allPaymentStatus || row?.allPaymentDetails?.allPaymentStatus || "";
+          const statusLower = paymentStatus ? String(paymentStatus).toLowerCase().trim() : "";
+          const displayStatus = paymentStatus || "-";
+          const isDue = statusLower === "due";
+          
+          return (
+            <ScalableText
+              fontFamily="SemiBold"
+              style={{
+                fontSize: 12,
+                marginLeft: 5,
+                textTransform: "capitalize",
+                color: isDue ? COLORS.textError : COLORS.textSuccess,
+              }}
+            >
+              {displayStatus}
+            </ScalableText>
+          );
+        } catch (error) {
+          console.error("Error rendering payment status:", error, row);
+          return (
+            <ScalableText
+              fontFamily="SemiBold"
+              style={{
+                fontSize: 12,
+                marginLeft: 5,
+                color: COLORS.textSecondary,
+              }}
+            >
+              -
+            </ScalableText>
+          );
+        }
+      },
+    });
+
     return columns.filter((column) =>
       visibleColumns.some((visibleColumn) => visibleColumn.key === column.key)
     );
   }, [visibleColumns, studentColumns]);
 
-  const { isLoading, data, refetch } = useStudentsListQuery({
-    studentStatus: filters.studentStatus || undefined,
-    paymentStatus: filters.paymentStatus || undefined,
-    courseName: filters.courseName || undefined,
-    batchName: filters.batchName || undefined,
-  });
+  const apiFilters = useMemo(() => {
+    const apiParams: any = {};
+    
+    if (filters.studentStatus) apiParams.studentStatus = filters.studentStatus;
+    if (filters.paymentStatus) apiParams.paymentStatus = filters.paymentStatus;
+    if (filters.paymentMode) apiParams.paymentMode = filters.paymentMode;
+    if (filters.paymentDateStart) apiParams.paymentDateStart = filters.paymentDateStart;
+    if (filters.paymentDateEnd) apiParams.paymentDateEnd = filters.paymentDateEnd;
+    if (filters.admissionDateStart) apiParams.admissionDateStart = filters.admissionDateStart;
+    if (filters.admissionDateEnd) apiParams.admissionDateEnd = filters.admissionDateEnd;
+    
+    // Only send courseId and batchId when batch is selected
+    // Course select alone should not trigger filter, only batch select should
+    if (filters.batchName && filters.courseName) {
+      apiParams.courseId = filters.courseName; // courseName contains courseId value
+      apiParams.batchId = filters.batchName; // batchName contains batchId value
+    }
+
+    console.log('🔍 API Filters being sent:', apiParams);
+    return apiParams;
+  }, [filters]);
+
+  const { isLoading, data, refetch } = useStudentsListQuery(apiFilters);
+
+  // Clear batch filter when course changes and selected batch doesn't belong to new course
+  useEffect(() => {
+    if (filters.courseName && filters.batchName) {
+      const selectedBatch = FILTERED_BATCHES_LIST.find((batch) => batch.value === filters.batchName);
+      if (!selectedBatch) {
+        // Selected batch doesn't belong to selected course, clear it
+        setFilters((previous) => ({ ...previous, batchName: "" }));
+      }
+    } else if (!filters.courseName && filters.batchName) {
+      // If course is cleared, also clear batch
+      setFilters((previous) => ({ ...previous, batchName: "" }));
+    }
+  }, [filters.courseName, FILTERED_BATCHES_LIST]);
 
   // Handle refresh parameter from navigation
   useEffect(() => {
@@ -447,18 +563,33 @@ const StudentLists = () => {
   }, [navigation, refetch]);
 
   const studentsList: TStudentList[] = useMemo(() => {
+    console.log('📊 Student List Debug:', {
+      isLoading,
+      hasData: !!data,
+      statuscode: data?.statuscode,
+      dataLength: Array.isArray(data?.data) ? data.data.length : 0,
+      filters,
+    });
+
     if (!isLoading && data && data.statuscode === 200 && Array.isArray(data.data)) {
       // New API studentFilterListV2 can return a summary object as first element.
       // Filter out any entries that don't look like real student records.
       const raw = data.data as any[];
+      console.log('📊 Raw data length:', raw.length);
+      
       const onlyStudents = raw.filter(
         (item) =>
           item &&
           (item.studentEnrollmentNumber || item.rollNo || item.studentFirstName)
       );
 
-      return filteredStudentData(onlyStudents as unknown as TStudentList[], filters);
+      console.log('📊 Filtered students length:', onlyStudents.length);
+      const finalList = filteredStudentData(onlyStudents as unknown as TStudentList[], filters);
+      console.log('📊 Final students list length:', finalList.length);
+      
+      return finalList;
     } else {
+      console.log('⚠️ No data or loading:', { isLoading, hasData: !!data, statuscode: data?.statuscode });
       return [];
     }
   }, [isLoading, data, filters]);
@@ -568,8 +699,10 @@ const StudentLists = () => {
           }
         />
         <FilterButton
-          setVisibleColumns={setVisibleColumns}
-          visibleColumns={visibleColumns}
+          filters={filters}
+          setFilters={setFilters}
+          coursesList={COURSES_LIST}
+          batchesList={FILTERED_BATCHES_LIST}
         />
       </Flex>
 
@@ -690,59 +823,6 @@ const StudentLists = () => {
           </ScrollView>
         </View>
       )}
-      <View style={{ marginBottom: 25 }}>
-        <Grid
-          style={{
-            flexWrap: "wrap",
-            marginHorizontal: 10,
-            marginVertical: 30,
-          }}
-        >
-          <Col>
-            <StudentFilterSelect
-              onChange={(e) =>
-                setFilters((previous) => ({ ...previous, studentStatus: e }))
-              }
-              label="Student Status"
-              options={[
-                { label: "Active", value: "active" },
-                { label: "Inactive", value: "inActive" },
-                { label: "Defaulter", value: "defaulter" },
-              ]}
-            />
-          </Col>
-          <Col>
-            <StudentFilterSelect
-              onChange={(e) =>
-                setFilters((previous) => ({ ...previous, paymentStatus: e }))
-              }
-              label="Payment Status"
-              options={[
-                { label: "Paid", value: "paid" },
-                { label: "Due", value: "due" },
-              ]}
-            />
-          </Col>
-          <Col>
-            <StudentFilterSelect
-              onChange={(e) =>
-                setFilters((previous) => ({ ...previous, courseName: e }))
-              }
-              label="Course Name"
-              options={COURSES_LIST}
-            />
-          </Col>
-          <Col>
-            <StudentFilterSelect
-              onChange={(e) =>
-                setFilters((previous) => ({ ...previous, batchName: e }))
-              }
-              label="Batch Name"
-              options={BATCHES_LIST}
-            />
-          </Col>
-        </Grid>
-      </View>
 
       <ThemeScrollView paddingHorizontal={12} reloadData={refetch}>
         <Flex styles={{ marginBottom: 20 }}>

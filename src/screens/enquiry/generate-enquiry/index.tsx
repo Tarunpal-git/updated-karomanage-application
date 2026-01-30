@@ -117,11 +117,19 @@ const GenerateEnquiry = () => {
     mode: "onSubmit",
   });
 
+  // Helper function to capitalize first letter of first word
+  const capitalizeFirstWord = (text: string): string => {
+    if (!text) return '';
+    const trimmed = text.trim();
+    if (trimmed.length === 0) return '';
+    return trimmed.charAt(0).toUpperCase() + trimmed.slice(1);
+  };
+
   // Transform courses data to dropdown options
   const COURSES_LIST: TSelectOptions[] = useMemo(() => {
     if (!courseLoading && courseData?.statusCode === 200 && Array.isArray(courseData.data)) {
       return courseData.data.map((course: any) => ({
-        label: course.courseName,
+        label: capitalizeFirstWord(course.courseName),
         value: course.courseName,
       }));
     }

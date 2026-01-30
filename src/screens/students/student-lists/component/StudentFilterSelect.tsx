@@ -10,25 +10,36 @@ interface IStudentFilterSelect {
   label: string;
   onChange: (e: string) => void;
   options: { label: string; value: string }[];
+  disabled?: boolean;
 }
 
 const StudentFilterSelect: FC<IStudentFilterSelect> = ({
   label,
   onChange,
   options,
+  disabled = false,
 }) => {
   return (
     <SelectDropdown
-      data={[{ value: "", label: "All" }, ...options]}
+      data={disabled ? [{ value: "", label: "Select course first" }] : [{ value: "", label: "All" }, ...options]}
       onSelect={(selectedItem) => {
-        onChange(selectedItem.value);
+        if (!disabled) {
+          onChange(selectedItem.value);
+        }
       }}
+      disabled={disabled}
       renderButton={(selectedItem) => {
         return (
-          <View style={{ ...styles.dropdownButtonStyle }}>
+          <View style={{ 
+            ...styles.dropdownButtonStyle,
+            opacity: disabled ? 0.5 : 1,
+          }}>
             <ScalableText
               fontFamily="Medium"
-              style={styles.dropdownButtonTxtStyle}
+              style={[
+                styles.dropdownButtonTxtStyle,
+                disabled && styles.disabledText,
+              ]}
               numberOfLines={3}
             >
               {selectedItem && selectedItem.value === ""
@@ -72,9 +83,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "center",
     alignItems: "baseline",
-    marginBottom: 8,
+    marginBottom: 0,
     flex: 0,
-    minHeight: 50,
+    minHeight: 40,
   },
   dropdownButtonTxtStyle: {
     fontSize: 12,
@@ -91,6 +102,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 2,
     paddingVertical: 10,
     minWidth: 100,
+    marginTop: -19,
   },
   dropdownItemStyle: {
     width: "100%",
@@ -107,5 +119,8 @@ const styles = StyleSheet.create({
   dropdownItemIconStyle: {
     fontSize: 28,
     marginRight: 8,
+  },
+  disabledText: {
+    color: COLORS.textSecondary,
   },
 });

@@ -700,10 +700,18 @@ const CreateBatch = () => {
     }
   }, [handler.watch('batchStartDate'), handler.watch('courseId'), courseData]);
 
+  // Helper function to capitalize first letter of first word
+  const capitalizeFirstWord = (text: string): string => {
+    if (!text) return '';
+    const trimmed = text.trim();
+    if (trimmed.length === 0) return '';
+    return trimmed.charAt(0).toUpperCase() + trimmed.slice(1);
+  };
+
   const COURSES_LIST = useMemo(() => {
     return courseData?.data
       ? courseData.data.map((course: { courseName: string; courseId: string }) => ({
-          label: course.courseName,
+          label: capitalizeFirstWord(course.courseName),
           value: course.courseId,
         }))
       : [];

@@ -74,4 +74,8 @@ type TStudentList = {
   refundList: any[];
   referedBy: string;
   dateCreated: number;
+  dateOfAdmission?: string | null;
+  studentImage?: string;
+  paymentStatus?: string; // Payment status from student filter list v2 API
+  allPaymentStatus?: string; // Direct payment status field from API response (e.g., "due", "paid")
 };
