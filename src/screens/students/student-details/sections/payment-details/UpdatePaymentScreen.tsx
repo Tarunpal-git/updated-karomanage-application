@@ -2908,7 +2908,7 @@
 
 
 import React, { FC, useState, useMemo, useEffect } from "react";
-import { StyleSheet, View, Alert, TouchableOpacity, Modal, TouchableWithoutFeedback, ScrollView } from "react-native";
+import { StyleSheet, View, Alert, TouchableOpacity, Modal, TouchableWithoutFeedback, ScrollView, Platform, Dimensions } from "react-native";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import SafeView from "../../../../../@ui/safe-view/SafeView";
 import AppHeader from "../../../../../@ui/app-header/AppHeader";
@@ -2930,6 +2930,9 @@ import SelectDropdown from "../../../../../@ui/select-dropdown/SelectDropdown";
 import Input from "../../../../../@ui/input/Input";
 import DateInput from "../../../../../@ui/date-input/DateInput";
 import DatePicker from "react-native-date-picker";
+import Pdf from "react-native-pdf";
+import RNFS from "react-native-fs";
+import RNBlobUtil from "react-native-blob-util";
 import { request } from "../../../../../services/axios.service";
 import { useSelector } from "react-redux";
 import { RootState } from "../../../../../app/store";
@@ -2953,6 +2956,7 @@ interface CouponOption {
 }
 
 const UpdatePaymentScreen: FC = () => {
+  const windowHeight = Dimensions.get("window").height;
   const navigation = useNavigation<THomeStackNavigator>();
   const route = useRoute<any>();
   const { course, studentRollNo } = route.params;
@@ -2975,6 +2979,9 @@ const UpdatePaymentScreen: FC = () => {
   const [isPayingFirstInstallment, setIsPayingFirstInstallment] = useState<string>('');
   const [installmentDescription, setInstallmentDescription] = useState('');
   const [selectedInstallmentForDate, setSelectedInstallmentForDate] = useState<string>('');
+  const [invoiceModalVisible, setInvoiceModalVisible] = useState(false);
+  const [invoicePdf, setInvoicePdf] = useState<string | null>(null);
+  const [isInvoiceLoading, setIsInvoiceLoading] = useState(false);
   
   
   // Form handler for dynamic installments
@@ -3691,9 +3698,111 @@ const UpdatePaymentScreen: FC = () => {
     setTransactionId("");
   };
 
-  const handleDownloadInvoice = (installmentId: string) => {
-    console.log("Download invoice:", installmentId);
-    Alert.alert("Download Invoice", "Download functionality will be implemented soon");
+  const handleDownloadInvoice = async (installmentId: string) => {
+    try {
+      setIsInvoiceLoading(true);
+      setInvoicePdf(null);
+
+      // Find the installment details
+      const installment = installmentDetails.find(
+        (inst: any) => inst.installmentId === installmentId
+      );
+
+      if (!installment) {
+        Alert.alert("Error", "Installment not found");
+        return;
+      }
+
+      const studentDetails = studentData?.data;
+
+      if (!studentDetails || !selectedOrganization) {
+        Alert.alert("Error", "Student or organization details not found");
+        return;
+      }
+
+      const payload = {
+        customerId: selectedOrganization.customerId,
+        organizationId: selectedOrganization.organizationId,
+        action: "student",
+        student: {
+          rollNo: studentRollNo,
+          enrollmentNo: studentDetails.studentEnrollmentNumber || "",
+          courseId: course.courseId,
+          installmentId,
+        },
+      };
+
+      console.log("Downloading invoice with payload:", JSON.stringify(payload, null, 2));
+
+      const response = await request({
+        method: "POST",
+        url: apiUrls.reports.DOWNLOAD_COMMON_REPORT,
+        data: payload,
+      });
+
+      if (response.statusCode !== 200 || !response.data) {
+        console.error("Failed to download invoice:", response);
+        Alert.alert(
+          "Error",
+          response.message || "Failed to download invoice. Please try again."
+        );
+        return;
+      }
+
+      const base64Pdf: string = response.data;
+      setInvoicePdf(base64Pdf);
+      setInvoiceModalVisible(true);
+
+      // Try to save a copy into the device Downloads folder on Android
+      if (Platform.OS === "android") {
+        try {
+          const downloadDir =
+            RNBlobUtil.fs.dirs.DownloadDir || RNFS.DocumentDirectoryPath;
+          const downloadPath = `${downloadDir}/invoice_${studentRollNo}_${installmentId}.pdf`;
+
+          // Write file using react-native-blob-util (better integration with Android's storage)
+          await RNBlobUtil.fs.writeFile(downloadPath, base64Pdf, "base64");
+
+          // Register with Android Download Manager so it shows under "Downloads"
+          if (RNBlobUtil.android && RNBlobUtil.android.addCompleteDownload) {
+            RNBlobUtil.android.addCompleteDownload({
+              title: `invoice_${studentRollNo}_${installmentId}.pdf`,
+              description: "Invoice receipt",
+              mime: "application/pdf",
+              path: `file://${downloadPath}`,
+              showNotification: true,
+            });
+          }
+
+          // Let media scanner see the file
+          await RNBlobUtil.fs.scanFile([
+            {
+              path: downloadPath,
+              mime: "application/pdf",
+            },
+          ]);
+
+          ToastAndroid.show(
+            "Invoice saved to Downloads folder",
+            ToastAndroid.SHORT
+          );
+        } catch (saveError) {
+          console.error("Error saving invoice to Downloads:", saveError);
+          ToastAndroid.show(
+            "Failed to save invoice in Downloads",
+            ToastAndroid.SHORT
+          );
+        }
+      }
+    } catch (error: any) {
+      console.error("Error downloading invoice:", error);
+      Alert.alert(
+        "Error",
+        error?.message || "Failed to download invoice. Please try again."
+      );
+    } finally {
+      setIsInvoiceLoading(false);
+    }
   };
 
   const handleViewInvoice = async (installmentId: string) => {
@@ -3723,7 +3832,17 @@ const UpdatePaymentScreen: FC = () => {
 
       // Get organization and GST data
       const gstRuleData = organization?.gstRuleData;
-      const gstInclusionType = gstRuleData?.inclusionType || 'noGST';
+      // Normalize inclusionType: backend expects "Incl" | "Excl" | "NoGST"
+      // Frontend might have "included" | "excluded" | "noGST" (lowercase)
+      const rawInclusionType: string = String(gstRuleData?.inclusionType || "noGST");
+      let gstInclusionType: string = "NoGST";
+      const normalizedType = rawInclusionType.toLowerCase();
+      if (normalizedType === "included" || rawInclusionType === "Incl") {
+        gstInclusionType = "Incl";
+      } else if (normalizedType === "excluded" || rawInclusionType === "Excl") {
+        gstInclusionType = "Excl";
+      }
+      
       const cgstPercentage = gstRuleData?.cgstPercentage || 0;
       const sgstPercentage = gstRuleData?.sgstPercentage || 0;
       const gstinNumber = gstRuleData?.gstinNumber || '';
@@ -3735,28 +3854,87 @@ const UpdatePaymentScreen: FC = () => {
       const totalDueAmount = paymentDetails?.totalDuePayment || 0;
       const discountAmount = paymentDetails?.discountedPaymentAmount || 0;
       const amountAfterDiscount = courseFee - discountAmount;
+      
+      // Calculate previous discount amount (total discount applied before this installment)
+      const previousDiscountAmount = paymentDetails?.previousDiscountAmount || 0;
+      
+      console.log("💰 Amount Calculation Debug:", {
+        paidAmount,
+        courseFee,
+        totalReceivedAmount,
+        totalDueAmount,
+        discountAmount,
+        previousDiscountAmount,
+      });
 
-      // Calculate GST amounts based on inclusion type
+      // Calculate GST amounts based on inclusion type (match web logic exactly)
       let cgstAmount = 0;
       let sgstAmount = 0;
       let tuitionFee = paidAmount;
-      
-      if (gstInclusionType === 'included' && (cgstPercentage > 0 || sgstPercentage > 0)) {
-        // GST is included in the amount
-        const baseAmount = paidAmount / (1 + (cgstPercentage + sgstPercentage) / 100);
-        cgstAmount = Math.round((baseAmount * cgstPercentage) / 100);
-        sgstAmount = Math.round((baseAmount * sgstPercentage) / 100);
-        tuitionFee = Math.round(baseAmount);
-      } else if (gstInclusionType === 'excluded' && (cgstPercentage > 0 || sgstPercentage > 0)) {
-        // GST is added on top
+
+      console.log("📊 GST Calculation Debug:", {
+        gstInclusionType,
+        rawInclusionType: gstRuleData?.inclusionType,
+        cgstPercentage,
+        sgstPercentage,
+        paidAmount,
+      });
+
+      if (gstInclusionType === "Incl" && (cgstPercentage > 0 || sgstPercentage > 0)) {
+        // Match web: when GST is "included" in the final amount,
+        // CGST/SGST = paidAmount * percentage / 100
+        // tuitionFee = paidAmount - (CGST + SGST)
         cgstAmount = Math.round((paidAmount * cgstPercentage) / 100);
         sgstAmount = Math.round((paidAmount * sgstPercentage) / 100);
         tuitionFee = paidAmount - (cgstAmount + sgstAmount);
+        console.log("✅ GST Included calculation:", { cgstAmount, sgstAmount, tuitionFee });
+      } else if (gstInclusionType === "Excl" && (cgstPercentage > 0 || sgstPercentage > 0)) {
+        // GST is added on top of tuition fee
+        cgstAmount = Math.round((paidAmount * cgstPercentage) / 100);
+        sgstAmount = Math.round((paidAmount * sgstPercentage) / 100);
+        tuitionFee = paidAmount;
+        console.log("✅ GST Excluded calculation:", { cgstAmount, sgstAmount, tuitionFee });
+      } else {
+        console.log("⚠️ No GST calculation (NoGST or zero percentages)");
       }
+      // For "NoGST", keep defaults (all zero, tuitionFee = paidAmount)
 
-      // Calculate previous received amounts
-      const previousReceivedAmount = totalReceivedAmount - paidAmount;
-      const remainingDueAmount = totalDueAmount - paidAmount;
+      // Calculate previous received amount (sum of all installments paid BEFORE this one)
+      // Match web: previousFeeSlipReceivedAmount = sum of all previous installments' receivedPayment
+      let previousReceivedAmount = 0;
+      const currentInstallmentIndex = installmentDetails.findIndex(
+        (inst: any) => inst.installmentId === installmentId
+      );
+      
+      if (currentInstallmentIndex > 0) {
+        // Sum all installments before current one
+        for (let i = 0; i < currentInstallmentIndex; i++) {
+          const prevInst = installmentDetails[i];
+          if (prevInst.paymentStatus?.toLowerCase() === 'paid') {
+            previousReceivedAmount += prevInst.receivedPayment || prevInst.duePayment || 0;
+          }
+        }
+      } else {
+        // If this is the first installment, previousReceivedAmount = totalReceivedAmount - paidAmount
+        previousReceivedAmount = Math.max(totalReceivedAmount - paidAmount, 0);
+      }
+      
+      // Calculate Net Amount Due = Course Fee - Previous Payments - Previous Discount
+      const netAmountDue = Math.max(courseFee - previousReceivedAmount - previousDiscountAmount, 0);
+      
+      // Calculate Final Amount Due = Net Amount Due - Current Discount
+      const finalAmountDue = Math.max(netAmountDue - discountAmount, 0);
+      
+      const remainingDueAmount = totalDueAmount;
+      
+      console.log("📊 Previous Amount Calculation:", {
+        currentInstallmentIndex,
+        previousReceivedAmount,
+        netAmountDue,
+        finalAmountDue,
+        totalReceivedAmount,
+        paidAmount,
+      });
 
       // Convert amount to words (simple implementation)
       const amountToWords = (amount: number) => {
@@ -3771,18 +3949,41 @@ const UpdatePaymentScreen: FC = () => {
         return `Rupees ${amount.toLocaleString('en-IN')} only`;
       };
 
-      // Format date
+      // Format date (match web format: DD-MM-YYYY)
       const formatDateForInvoice = (dateValue: any) => {
-        if (!dateValue) return new Date().toLocaleDateString('en-GB');
-        const date = new Date(dateValue);
-        const day = date.getDate().toString().padStart(2, '0');
-        const month = (date.getMonth() + 1).toString().padStart(2, '0');
-        const year = date.getFullYear();
-        return `${day}-${month}-${year}`;
+        if (!dateValue) {
+          const today = new Date();
+          const day = today.getDate().toString().padStart(2, '0');
+          const month = (today.getMonth() + 1).toString().padStart(2, '0');
+          const year = today.getFullYear();
+          return `${day}-${month}-${year}`;
+        }
+        try {
+          const date = new Date(dateValue);
+          if (isNaN(date.getTime())) {
+            // Invalid date, use today
+            const today = new Date();
+            const day = today.getDate().toString().padStart(2, '0');
+            const month = (today.getMonth() + 1).toString().padStart(2, '0');
+            const year = today.getFullYear();
+            return `${day}-${month}-${year}`;
+          }
+          const day = date.getDate().toString().padStart(2, '0');
+          const month = (date.getMonth() + 1).toString().padStart(2, '0');
+          const year = date.getFullYear();
+          return `${day}-${month}-${year}`;
+        } catch (error) {
+          const today = new Date();
+          const day = today.getDate().toString().padStart(2, '0');
+          const month = (today.getMonth() + 1).toString().padStart(2, '0');
+          const year = today.getFullYear();
+          return `${day}-${month}-${year}`;
+        }
       };
 
-      // Generate receipt number (use installment number or generate)
-      const receiptNo = installment.installmentNumber ? parseInt(`${installment.installmentNumber}${Date.now().toString().slice(-3)}`) : Math.floor(Math.random() * 100000) + 10000;
+      // Generate receipt number (backend will use this or generate its own)
+      // For now, use a consistent format based on timestamp
+      const receiptNo = Math.floor(Date.now() / 1000) % 100000;
 
       // Build invoice payload
       const invoicePayload: {
@@ -3849,7 +4050,7 @@ const UpdatePaymentScreen: FC = () => {
           studentFeeSlipCourseName: courseData?.data?.courseName || courseData?.courseName || course.courseName || '',
           studentFeeSlipCourseId: course.courseId || '',
           studentFeeSlipInstallmentId: installmentId,
-          studentFeeSlipPaymentMode: installment.paymentMode || 'Cash',
+          studentFeeSlipPaymentMode: installment.paymentMode || '',
           studentFeeSlipTransactionId: installment.transactionId || '-',
           studentFeeSlipPaymentRecieverId: installment.paymentRecieverId || '',
           studentFeeSlipAmountInWords: amountToWords(paidAmount),
@@ -3863,6 +4064,7 @@ const UpdatePaymentScreen: FC = () => {
           studentFeeSlipCGSTPercentage: cgstPercentage,
           studentFeeSlipSGSTAmount: sgstAmount,
           studentFeeSlipCGSTAmount: cgstAmount,
+          // Grand total is the amount paid for this receipt
           studentFeeSlipGrandTotal: paidAmount,
           studentFeeSlipCourseFee: courseFee,
           previousFeeSlipReceivedAmount: previousReceivedAmount,
@@ -3873,13 +4075,33 @@ const UpdatePaymentScreen: FC = () => {
           receivedPaymentCGSTAmount: cgstAmount,
           receivedPaymentSGSTAmount: sgstAmount,
           studentFeeSlipTutionFee: tuitionFee,
-          studentFeeSlipDueAmount: remainingDueAmount,
-          previousDiscountAmount: 0,
-          inclusionType: gstInclusionType === 'included' ? 'Incl' : (gstInclusionType === 'excluded' ? 'Excl' : 'NoGST')
+          studentFeeSlipDueAmount: totalDueAmount,
+          previousDiscountAmount: previousDiscountAmount,
+          inclusionType: gstInclusionType
         }
       };
 
       console.log('📧 Invoice Payload:', JSON.stringify(invoicePayload, null, 2));
+      console.log('🔍 Key Invoice Values:', {
+        paidAmount,
+        courseFee,
+        tuitionFee,
+        cgstAmount,
+        sgstAmount,
+        totalGST: cgstAmount + sgstAmount,
+        grandTotal: paidAmount,
+        previousReceivedAmount,
+        previousDiscountAmount,
+        netAmountDue,
+        finalAmountDue,
+        discountAmount,
+        totalDueAmount,
+        remainingDueAmount,
+        paymentMode: installment.paymentMode,
+        inclusionType: gstInclusionType,
+        receiptNo,
+        invoiceDate: invoicePayload.studentFeeSlip.studentFeeSlipDate,
+      });
 
       // Call the API
       const response = await sendInvoiceEmail(invoicePayload);
@@ -4759,7 +4981,7 @@ const UpdatePaymentScreen: FC = () => {
                     return (
                       <Row key={installment.installmentId} style={styles.dataRow}>
                         <Col size={8} style={{ alignItems: 'center', justifyContent: 'center' }}>
-                          <ScalableText style={styles.dataText} fontFamily="Regular">
+                        <ScalableText style={styles.dataText} fontFamily="Regular">
                             {installment.installmentNumber}
                           </ScalableText>
                         </Col>
@@ -4790,14 +5012,14 @@ const UpdatePaymentScreen: FC = () => {
                           <ScalableText style={styles.dataText} fontFamily="Regular">
                             {(installment.paymentMode || '').toString().toUpperCase() || '-'}
                           </ScalableText>
-                        </Col>
-                        <Col size={18} style={{ alignItems: 'center', justifyContent: 'center',   }}>
+                          </Col>
+                          <Col size={18} style={{ alignItems: 'center', justifyContent: 'center',   }}>
                           <Flex
                             styles={{
                               ...styles.statusChip,
                               backgroundColor: statusStyle.backgroundColor,
                             }}
-                          >
+                           >
                             <ScalableText
                               style={{
                                 ...styles.statusChipText,
@@ -4808,9 +5030,9 @@ const UpdatePaymentScreen: FC = () => {
                               {installment.paymentStatus?.toUpperCase()}
                             </ScalableText>
                           </Flex>
-                        </Col>
-                        <Col size={8} style={{ alignItems: 'flex-start', justifyContent: 'center' }}>
-                        <Flex flexDirection="row" justify="flex-start" align="center">
+                          </Col>
+                          <Col size={8} style={{ alignItems: 'flex-start', justifyContent: 'center' }}>
+                          <Flex flexDirection="row" justify="flex-start" align="center">
                             <TouchableOpacity 
                               onPress={() => handleViewInvoice(installment.installmentId)}
                               disabled={isSendingInvoice}
@@ -5324,6 +5546,74 @@ const UpdatePaymentScreen: FC = () => {
           )}
         </Flex>
       </ThemeScrollView>
+
+      {/* Invoice Preview Modal */}
+      <Modal
+        visible={invoiceModalVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setInvoiceModalVisible(false)}
+      >
+        <View
+          style={[
+            styles.modalOverlay,
+            {
+              justifyContent: "flex-start",
+              paddingTop: 80,
+            },
+          ]}
+        >
+          <View style={[styles.modalContainer, { maxHeight: "90%" }]}>
+            <Flex flexDirection="row" justify="space-between" align="center" mb={15}>
+              <ScalableText style={styles.modalTitle} fontFamily="Bold">
+                Download Invoice
+              </ScalableText>
+              <TouchableOpacity
+                onPress={() => setInvoiceModalVisible(false)}
+                style={styles.modalCloseButton}
+                activeOpacity={0.7}
+              >
+                <View style={styles.closeIconContainer}>
+                  <ScalableText style={styles.closeIcon} fontFamily="Bold">
+                    ×
+                  </ScalableText>
+                </View>
+              </TouchableOpacity>
+            </Flex>
+
+            {isInvoiceLoading && (
+              <Flex justify="center" align="center" styles={{ minHeight: 200 }}>
+                <ScalableText fontFamily="Medium" style={{ color: COLORS.textSecondary }}>
+                  Loading invoice...
+                </ScalableText>
+              </Flex>
+            )}
+
+            {!isInvoiceLoading && !!invoicePdf && (
+              <View
+                style={{
+                  flex: 1,
+                  minHeight: windowHeight * 0.5,
+                }}
+              >
+                <Pdf
+                  source={{ uri: `data:application/pdf;base64,${invoicePdf}` }}
+                  onError={() => {
+                    ToastAndroid.show("Failed to load invoice", ToastAndroid.SHORT);
+                  }}
+                  style={{
+                    width: "95%",
+                    height: windowHeight * 0.5,
+                    backgroundColor: COLORS.white,
+                  }}
+                  showsVerticalScrollIndicator
+                  scale={1.1}
+                />
+              </View>
+            )}
+          </View>
+        </View>
+      </Modal>
 
       {/* Update Payment Status Modal */}
       <Modal
@@ -5849,6 +6139,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 20,
     width: "90%",
+    height: "90%",
     maxWidth: 500,
     shadowColor: "#000",
     shadowOffset: {
