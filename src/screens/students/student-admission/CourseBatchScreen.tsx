@@ -38,11 +38,19 @@ const CourseBatchScreen = () => {
     resolver: yupResolver(courseBatchValidation) 
   });
 
+  // Helper function to capitalize first letter of first word
+  const capitalizeFirstWord = (text: string): string => {
+    if (!text) return '';
+    const trimmed = text.trim();
+    if (trimmed.length === 0) return '';
+    return trimmed.charAt(0).toUpperCase() + trimmed.slice(1);
+  };
+
   // Extract course options from API
   const courseOptions = React.useMemo(() => {
     if (!courseLoading && courseData?.statusCode === 200 && courseData?.data) {
       return courseData.data.map((course: any) => ({
-        label: course.courseName,
+        label: capitalizeFirstWord(course.courseName),
         value: course.courseName,
         courseId: course.courseId,
         courseFee: course.courseFee,

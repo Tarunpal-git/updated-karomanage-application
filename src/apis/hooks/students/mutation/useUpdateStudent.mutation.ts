@@ -28,7 +28,13 @@ export const useUpdateStudentMutation = () => {
       };
       
       // Build the new payload structure
-      const updatePayload = {
+      console.log('🔧 === MUTATION: BUILDING API PAYLOAD ===');
+      console.log('🔧 Received payload.dateOfAdmission:', payload.dateOfAdmission);
+      console.log('🔧 Received payload.studentDateOfBirth:', payload.studentDateOfBirth);
+      
+      // Only include dateOfAdmission if it's actually provided (not undefined)
+      // This prevents clearing the date if backend doesn't return it
+      const updatePayload: any = {
         user: userObject,
         customerId: selectedOrganization?.customerId || '',
         rollNo: payload.rollNo || '',
@@ -47,10 +53,20 @@ export const useUpdateStudentMutation = () => {
         studentAddress: payload.studentAddress || '',
         studentGender: payload.studentGender || '',
         studentDepartmentName: payload.studentDepartmentName || payload.departmentName || '',
+        studentImage: payload.studentImage || '',
         studentDynamicFields: payload.studentDynamicFields || [],
       };
       
-      console.log('Payload:', JSON.stringify(updatePayload, null, 2));
+      // Only add dateOfAdmission if it's explicitly provided (not undefined)
+      // This way, if backend doesn't return it, we don't accidentally clear it
+      if (payload.dateOfAdmission !== undefined) {
+        updatePayload.dateOfAdmission = payload.dateOfAdmission || null;
+      }
+      
+      console.log('🔧 === FINAL API PAYLOAD ===');
+      console.log('🔧 Full Payload:', JSON.stringify(updatePayload, null, 2));
+      console.log('🔧 dateOfAdmission in API payload:', updatePayload.dateOfAdmission);
+      console.log('🔧 studentDateOfBirth in API payload:', updatePayload.studentDateOfBirth);
       
       const data = await request({
         method: 'POST',

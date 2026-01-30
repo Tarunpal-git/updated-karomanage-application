@@ -1,4 +1,4 @@
-import { StyleSheet, View, Alert, TouchableOpacity, Modal } from "react-native";
+import { StyleSheet, View, Alert, TouchableOpacity, Modal, Image, Platform } from "react-native";
 import React, { useMemo, useState } from "react";
 import CustomAlertModel from "../../../@ui/alert/CustomAlertModel";
 import SafeView from "../../../@ui/safe-view/SafeView";
@@ -34,6 +34,7 @@ const StudentProfile = () => {
   const { mutateAsync: deleteStudent, isPending: isDeleting } = useDeleteStudentMutation();
   const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
   const [showCustomAlert, setShowCustomAlert] = useState(false);
+  const [imageLoadError, setImageLoadError] = useState(false);
   const [alertData, setAlertData] = useState({
     message: '',
     okTitle: '',
@@ -55,6 +56,149 @@ const StudentProfile = () => {
       return undefined;
     }
   }, [isLoading, data]);
+
+  // Reset image error when student details change and debug image data
+  React.useEffect(() => {
+    setImageLoadError(false);
+    if (studentDetails?.studentImage) {
+      console.log('🖼️ Student Image Debug:');
+      console.log('🖼️ Original URI length:', studentDetails.studentImage.length);
+      console.log('🖼️ Original URI first 100 chars:', studentDetails.studentImage.substring(0, 100));
+      console.log('🖼️ Formatted URI:', formatImageUri(studentDetails.studentImage));
+      console.log('🖼️ Has data: prefix:', studentDetails.studentImage.startsWith('data:'));
+      console.log('🖼️ Has http: prefix:', studentDetails.studentImage.startsWith('http'));
+    }
+  }, [studentDetails?.studentImage]);
+
+  // Helper function to capitalize first letter of each word
+  const capitalizeName = (firstName: string, lastName: string): string => {
+    const capitalizeWord = (word: string) => {
+      if (!word) return '';
+      return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+    };
+    const capitalizedFirstName = capitalizeWord(firstName || '');
+    const capitalizedLastName = capitalizeWord(lastName || '');
+    return `${capitalizedFirstName} ${capitalizedLastName}`.trim();
+  };
+
+  // Helper function to format image URI for web compatibility
+  const formatImageUri = (imageUri: string | undefined): string | undefined => {
+    if (!imageUri || imageUri.trim() === '') return undefined;
+    
+    try {
+      // Trim whitespace
+      let trimmedUri = imageUri.trim();
+      
+      // If it's already a data URI, validate and return
+      if (trimmedUri.startsWith('data:image/')) {
+        // Validate the data URI format
+        if (trimmedUri.includes('base64,')) {
+          const base64Part = trimmedUri.split('base64,')[1];
+          if (base64Part && base64Part.length > 0) {
+            // Clean the base64 part
+            const cleanBase64 = base64Part.replace(/\s/g, '').replace(/\n/g, '').replace(/\r/g, '');
+            // Reconstruct with cleaned base64
+            const mimeMatch = trimmedUri.match(/data:image\/([^;]+)/);
+            const mimeType = mimeMatch ? mimeMatch[1] : 'jpeg';
+            return `data:image/${mimeType};base64,${cleanBase64}`;
+          }
+        }
+        return trimmedUri;
+      }
+      
+      // If it's a URL (http/https), return as is
+      if (trimmedUri.startsWith('http://') || trimmedUri.startsWith('https://')) {
+        return trimmedUri;
+      }
+      
+      // Remove any existing data: prefix if malformed
+      let cleanUri = trimmedUri;
+      if (cleanUri.includes('base64,')) {
+        const parts = cleanUri.split('base64,');
+        if (parts.length > 1) {
+          cleanUri = parts[parts.length - 1];
+        }
+      }
+      
+      // Remove any whitespace, newlines, or special characters that might break base64
+      cleanUri = cleanUri.replace(/\s/g, '').replace(/\n/g, '').replace(/\r/g, '');
+      
+      // If it's a base64 string without prefix, add the prefix for web
+      // Check if it looks like base64 (only contains base64 characters)
+      const base64Regex = /^[A-Za-z0-9+/=]+$/;
+      if (base64Regex.test(cleanUri) && cleanUri.length > 50) {
+        // Try to detect image type from the base64 string
+        // PNG starts with iVBORw0KGgo
+        // JPEG starts with /9j/
+        let imageType = 'jpeg'; // default
+        if (cleanUri.startsWith('iVBORw0KGgo')) {
+          imageType = 'png';
+        } else if (cleanUri.startsWith('/9j/')) {
+          imageType = 'jpeg';
+        } else if (cleanUri.startsWith('R0lGODlh') || cleanUri.startsWith('R0lGODdh')) {
+          imageType = 'gif';
+        }
+        
+        return `data:image/${imageType};base64,${cleanUri}`;
+      }
+      
+      // If it doesn't match base64 pattern, return as is (might be a URL or other format)
+      return trimmedUri;
+    } catch (error) {
+      console.error('Error formatting image URI:', error);
+      return undefined;
+    }
+  };
+
+  // Helper function to format date
+  const formatDate = (dateValue: string | number | null | undefined): string => {
+    if (!dateValue) return '-';
+    
+    try {
+      let date: Date;
+      
+      // Handle timestamp (number)
+      if (typeof dateValue === 'number') {
+        date = new Date(dateValue);
+      }
+      // Handle date string
+      else if (typeof dateValue === 'string') {
+        // Handle DD-MM-YYYY or DD/MM/YYYY format
+        if (dateValue.includes('-') || dateValue.includes('/')) {
+          const parts = dateValue.split(/[-/]/);
+          if (parts.length === 3) {
+            const [day, month, year] = parts;
+            
+            // Handle 2-digit year (YY format) - assume 20XX for years < 50, 19XX otherwise
+            let fullYear = parseInt(year);
+            if (year.length === 2) {
+              fullYear = parseInt(year) < 50 ? 2000 + parseInt(year) : 1900 + parseInt(year);
+            }
+            
+            date = new Date(fullYear, parseInt(month) - 1, parseInt(day));
+          } else {
+            date = new Date(dateValue);
+          }
+        } else {
+          date = new Date(dateValue);
+        }
+      } else {
+        return '-';
+      }
+      
+      if (isNaN(date.getTime())) return '-';
+      
+      // Format as DD/MM/YYYY
+      const day = date.getDate().toString().padStart(2, '0');
+      const month = (date.getMonth() + 1).toString().padStart(2, '0');
+      const year = date.getFullYear();
+      
+      return `${day}/${month}/${year}`;
+    } catch (error) {
+      console.log('Error formatting date:', error);
+      return '-';
+    }
+  };
 
   const handleEdit = () => {
     if (studentDetails) {
@@ -171,16 +315,48 @@ const StudentProfile = () => {
 
       <View style={styles.screenRoot}>
         <Flex flexDirection="column" styles={styles.profileAvatar}>
-          <Avatar
-            size={77}
-            textStyle={{ fontSize: 35 }}
-            content={`${studentDetails.studentFirstName} ${studentDetails.studentLastName}`}
-          />
+          {(() => {
+            const imageUri = studentDetails?.studentImage;
+            const formattedUri = imageUri ? formatImageUri(imageUri) : undefined;
+            const shouldShowImage = imageUri && formattedUri && !imageLoadError;
+            
+            if (!shouldShowImage) {
+              return (
+                <Avatar
+                  size={77}
+                  textStyle={{ fontSize: 35 }}
+                  content={capitalizeName(studentDetails?.studentFirstName || '', studentDetails?.studentLastName || '')}
+                />
+              );
+            }
+
+            // Use React Native Image component (works on both web and mobile)
+            return (
+              <Image
+                source={{ uri: formattedUri }}
+                style={styles.studentImage}
+                onError={(error: any) => {
+                  console.error('❌ Image load error:', error);
+                  console.error('❌ Platform:', Platform.OS);
+                  console.error('❌ Original Image URI length:', imageUri?.length);
+                  console.error('❌ Original Image URI preview:', imageUri?.substring(0, 100));
+                  console.error('❌ Formatted URI preview:', formattedUri?.substring(0, 100));
+                  console.error('❌ Formatted URI length:', formattedUri?.length);
+                  setImageLoadError(true);
+                }}
+                onLoad={() => {
+                  console.log('✅ Image loaded successfully on', Platform.OS);
+                  setImageLoadError(false);
+                }}
+                resizeMode="cover"
+                // Add key prop to force re-render if URI changes
+                key={formattedUri?.substring(0, 50)}
+              />
+            );
+          })()}
           <Flex flexDirection="row" align="center" justify="center" mt={10}>
             <ScalableText style={styles.userNameText} fontFamily="SemiBold">
-              {studentDetails.studentFirstName +
-                " " +
-                studentDetails.studentLastName}
+              {capitalizeName(studentDetails?.studentFirstName || '', studentDetails?.studentLastName || '')}
             </ScalableText>
             <Flex flexDirection="row" ml={10}>
               {hasUpdatePermission("Student") && (
@@ -227,9 +403,7 @@ const StudentProfile = () => {
                     fontFamily="Medium"
                   >
                     {isEmptyString(
-                      studentDetails.studentFirstName +
-                        " " +
-                        studentDetails.studentLastName
+                      capitalizeName(studentDetails?.studentFirstName || '', studentDetails?.studentLastName || '')
                     )}
                   </ScalableText>
                 </Col>
@@ -309,6 +483,58 @@ const StudentProfile = () => {
                     fontFamily="Medium"
                   >
                     {isEmptyString(studentDetails.studentContact)}
+                  </ScalableText>
+                </Col>
+              </Row>
+              <Row style={styles.sectionContentRow}>
+                <Col size={0.6}>
+                  <Flex justify="space-between">
+                    <ScalableText
+                      style={styles.sectionContentTitle}
+                      fontFamily="Bold"
+                    >
+                      Date of Birth
+                    </ScalableText>
+                    <ScalableText
+                      style={styles.sectionContentTitle}
+                      fontFamily="Bold"
+                    >
+                      :
+                    </ScalableText>
+                  </Flex>
+                </Col>
+                <Col>
+                  <ScalableText
+                    style={styles.sectionContentDataText}
+                    fontFamily="Medium"
+                  >
+                    {formatDate(studentDetails?.studentDateOfBirth)}
+                  </ScalableText>
+                </Col>
+              </Row>
+              <Row style={styles.sectionContentRow}>
+                <Col size={0.6}>
+                  <Flex justify="space-between">
+                    <ScalableText
+                      style={styles.sectionContentTitle}
+                      fontFamily="Bold"
+                    >
+                      Date of Admission
+                    </ScalableText>
+                    <ScalableText
+                      style={styles.sectionContentTitle}
+                      fontFamily="Bold"
+                    >
+                      :
+                    </ScalableText>
+                  </Flex>
+                </Col>
+                <Col>
+                  <ScalableText
+                    style={styles.sectionContentDataText}
+                    fontFamily="Medium"
+                  >
+                    {formatDate(studentDetails?.dateCreated)}
                   </ScalableText>
                 </Col>
               </Row>
@@ -449,6 +675,13 @@ const styles = StyleSheet.create({
     right: 0,
     top: -25,
     zIndex: 5,
+  },
+  studentImage: {
+    width: 77,
+    height: 77,
+    borderRadius: 77 / 2,
+    borderWidth: 3,
+    borderColor: COLORS.white,
   },
   actionButton: {
     padding: 8,

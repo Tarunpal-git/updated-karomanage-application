@@ -135,7 +135,7 @@ const ReviewScreen = () => {
         studentEmail: data.studentEmail || '',
         studentDateOfBirth: data.studentDateOfBirth ? formatDateForAPI(data.studentDateOfBirth) : null,
         dateOfAdmission: data.dateOfAdmission ? formatDateForAPI(data.dateOfAdmission) : null,
-        studentImage: '',
+        studentImage: data.studentImage || '',
         referralpaymentStatus: (data as any).referralpaymentStatus || 'paid',
         referralAmount: data.referralAmount || 0,
         referedBy: data.referedBy || '',

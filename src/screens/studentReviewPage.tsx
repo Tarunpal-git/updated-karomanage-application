@@ -111,6 +111,89 @@ const StudentReviewPage = (props: Props) => {
 
   const [dueNext, setDueNext] = useState<any>("")
 
+  // Helper function to format date properly (handles various formats including GMT strings)
+  const formatDateForDisplay = (dateValue: any): string => {
+    if (!dateValue) return "-";
+    
+    try {
+      let date: Date;
+      
+      // If it's already a Date object
+      if (dateValue instanceof Date) {
+        date = dateValue;
+      }
+      // If it's a string, try to parse it
+      else if (typeof dateValue === 'string') {
+        const trimmedValue = dateValue.trim();
+        
+        // Check if it's already in DD/MM/YYYY or DD-MM-YYYY format (exact match)
+        const formattedDatePattern = /^\d{2}[\/\-]\d{2}[\/\-]\d{4}$/;
+        if (formattedDatePattern.test(trimmedValue)) {
+          return customDateFormat(trimmedValue);
+        }
+        
+        // Handle date strings like "Tue Mar 12 2002 05:53:00 GMT+0530" or any other date string
+        // Always try to parse with Date constructor first for GMT strings
+        date = new Date(trimmedValue);
+        
+        // Debug logging
+        console.log('formatDateForDisplay - Input string:', trimmedValue);
+        console.log('formatDateForDisplay - Parsed date:', date);
+        console.log('formatDateForDisplay - Is valid:', !isNaN(date.getTime()));
+        
+        // Check if date is valid
+        if (isNaN(date.getTime())) {
+          // If parsing failed, try customDateFormat as fallback
+          try {
+            const formatted = customDateFormat(trimmedValue);
+            return formatted || "-";
+          } catch {
+            // If all else fails, return the original string (shouldn't happen but safety)
+            return trimmedValue;
+          }
+        }
+      }
+      // If it's a number (timestamp)
+      else if (typeof dateValue === 'number') {
+        date = new Date(dateValue);
+        if (isNaN(date.getTime())) {
+          return "-";
+        }
+      }
+      else {
+        // For other types, try to convert to string and parse
+        try {
+          date = new Date(String(dateValue));
+          if (isNaN(date.getTime())) {
+            const formatted = customDateFormat(dateValue);
+            return formatted || "-";
+          }
+        } catch {
+          return "-";
+        }
+      }
+      
+      // Format to DD/MM/YYYY
+      const day = String(date.getDate()).padStart(2, '0');
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const year = date.getFullYear();
+      
+      const formatted = `${day}/${month}/${year}`;
+      console.log('formatDateForDisplay - Final formatted:', formatted);
+      
+      return formatted;
+    } catch (error) {
+      // Fallback to customDateFormat if error
+      try {
+        const formatted = customDateFormat(dateValue);
+        return formatted || "-";
+      } catch {
+        // Last resort: return string representation
+        return String(dateValue) || "-";
+      }
+    }
+  };
+
   function parseCustomDateFormat(dateString: any) {
     const [day, month, year] = dateString.split('/');
     // Note: Months in JavaScript are 0-based, so we subtract 1 from the month
@@ -245,7 +328,14 @@ const StudentReviewPage = (props: Props) => {
                       <Grid sx={{ maxWidth: '60% !important' }}>
                         <MUITableCell sx={{ pb: '0 !important' }}>Date of birth :</MUITableCell></Grid>
                       <Grid sx={{ width: '76%' }}>
-                        <MUITableCell sx={{ pb: '0 !important' }}>{studentValues().dob ? customDateFormat(studentValues().dob) : "-"}</MUITableCell>
+                        <MUITableCell sx={{ pb: '0 !important' }}>{formatDateForDisplay(studentValues().dob)}</MUITableCell>
+                      </Grid>
+                    </TableRow>
+                    <TableRow sx={{ display: 'flex !important', columnGap: { sm: '0px', xs: '20px' }, justifyContent: { sm: 'space-between', xs: 'normal' } }}>
+                      <Grid sx={{ maxWidth: '60% !important' }}>
+                        <MUITableCell sx={{ pb: '0 !important' }}>Date of admission :</MUITableCell></Grid>
+                      <Grid sx={{ width: '76%' }}>
+                        <MUITableCell sx={{ pb: '0 !important' }}>{formatDateForDisplay(studentValues().dateOfAdmission)}</MUITableCell>
                       </Grid>
                     </TableRow>
                     <TableRow sx={{ display: 'flex !important', columnGap: { sm: '0px', xs: '20px' }, justifyContent: { sm: 'space-between', xs: 'normal' } }}>
