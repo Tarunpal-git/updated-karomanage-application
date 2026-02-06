@@ -1,0 +1,68 @@
+# Android / Studio
+*.iml
+
+build/
+local.properties
+.idea/
+captures/
+.externalNativeBuild/
+
+# Android APKs / app outputs
+*.apk
+*.ap_
+*.aab
+*.zip
+*.hprof
+
+# Kotlin / Java cache
+*.class
+*.jar
+*.war
+*.ear
+
+# Node / React Native
+node_modules/
+npm-debug.log
+yarn-error.log
+yarn-debug.log
+package-lock.json
+yarn.lock
+.gradle/
+# OS / temp files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Expo / Metro
+.expo/
+.expo-shared/
+
+# LFS / large files
+*.zip
+*.tar.gz
+*.jar
+*.aar
+*.so
+*.dylib
+*.dll
+
+# VS Code
+.vscode/
+
+
+# Gradle
+.gradle/
+build/
+**/build/
+
+# Android
+local.properties
+*.iml
+
+
+android/build/
+android/app/build/
+ios/build/
+
