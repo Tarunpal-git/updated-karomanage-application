@@ -13,7 +13,7 @@ import ThemeScrollView from "../../../@ui/theme-scroll-view/ThemeScrollView";
 import SelectDropdown from "../../../@ui/select-dropdown/SelectDropdown";
 import Flex from "../../../@ui/flex/Flex";
 import { useStudentDetailsQuery } from "../../../apis/hooks/students/query/useStudentDetails.query";
-import CollegeAndBatches from "./sections/college-and-batches/CollegeAndBatches";
+// import CollegeAndBatches from "./sections/college-and-batches/CollegeAndBatches";
 import CourseDetails from "./sections/course-details/CourseDetails";
 import FadeIn from "../../../@ui/animated-views/FadeIn";
 import PaymentDetails from "./sections/payment-details/PaymentDetails";
@@ -28,7 +28,7 @@ const StudentDetails = () => {
   } = useRoute<RouteProp<TScreenNavigatorParams, "StudentDetails">>();
   const { data, isLoading, refetch } = useStudentDetailsQuery(rollNo);
 
-  const [section, setSection] = useState("College & Batch Details");
+  const [section, setSection] = useState("Course Details");
 
   const studentDetails: TStudentList = useMemo(() => {
     if (!isLoading && data?.data) {
@@ -40,12 +40,12 @@ const StudentDetails = () => {
 
   const renderSection = useMemo(() => {
     switch (section) {
-      case "College & Batch Details":
-        return (
-          <FadeIn delay={300}>
-            <CollegeAndBatches details={studentDetails} />
-          </FadeIn>
-        );
+      // case "College & Batch Details":
+      //   return (
+      //     <FadeIn delay={300}>
+      //       <CollegeAndBatches details={studentDetails} />
+      //     </FadeIn>
+      //   );
       case "Course Details":
         return (
           <FadeIn delay={300}>
@@ -85,7 +85,7 @@ const StudentDetails = () => {
   return (
     <SafeView>
       <AppHeader
-        title="Students Details"
+        title="Students Detail"
         handleBackClick={() => navigation.goBack()}
         leftSection={
           <ActionIcon
@@ -93,7 +93,7 @@ const StudentDetails = () => {
               navigation.navigate("StudentProfile", { rollNo: rollNo })
             }
           >
-            <AutoHeightImage source={IMAGES.profilePrimaryIcon} width={30} />
+            <AutoHeightImage source={IMAGES.profilePrimaryIcon} width={30} styles={{ marginHorizontal: 20}} />
           </ActionIcon>
         }
         showDrawer={false}
@@ -108,10 +108,10 @@ const StudentDetails = () => {
             label=""
             onChange={(e) => setSection(e)}
             options={[
-              {
-                label: "College & Batch Details",
-                value: "College & Batch Details",
-              },
+              // {
+              //   label: "College & Batch Details",
+              //   value: "College & Batch Details",
+              // },
               {
                 label: "Course Details",
                 value: "Course Details",
@@ -134,8 +134,8 @@ const StudentDetails = () => {
               },
             ]}
             value={{
-              label: "College & Batch Details",
-              value: "College & Batch Details",
+              label: "Course Details",
+              value: "Course Details",
             }}
           />
         </Flex>

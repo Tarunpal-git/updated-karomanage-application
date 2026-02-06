@@ -60,6 +60,7 @@ export type StudentAdmissionData = {
     date: string;
     amount: number;
     status: 'paid' | 'due';
+    paymentMode?: 'online' | 'cash' | 'other';
   }>;
   
   // Agent/Referral Details

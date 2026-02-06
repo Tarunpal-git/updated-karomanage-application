@@ -1,69 +1,28 @@
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import SafeView from "../../@ui/safe-view/SafeView";
 import AppHeader from "../../@ui/app-header/AppHeader";
 import Tabs from "../../@ui/tabs/Tabs";
 import Flex from "../../@ui/flex/Flex";
-import SelectManagersTab from "./tabs/SelectManagersTab";
-import SelectLeadsTab from "./tabs/SelectLeadsTab";
-import ApproveManagerTab from "./tabs/ApproveManagerTab";
-import { RouteProp, useRoute } from "@react-navigation/native";
-import { TScreenNavigatorParams } from "../../types/navigator/screen-navigator";
+import IndividualAssignmentTab from "./tabs/IndividualAssignmentTab.tsx";
+import GroupAssignmentTab from "./tabs/GroupAssignmentTab";
 
 const AssignManager = () => {
-  const [steps, setSteps] = useState("selectManager");
-  const [selectedManager, setSelectedManager] = useState<
-    TSelectedManager | undefined
-  >(undefined);
-  const [assignedLeads, setAssignedLeads] = useState<TEnquiryData[]>([]);
+  const [activeTab, setActiveTab] = useState("individual");
 
-  const { params } =
-    useRoute<RouteProp<TScreenNavigatorParams, "AssignManager">>();
-
-  const initialTabs = [
-    { label: "Select\nManager", value: "selectManager" },
-    { label: "Select\nLeads", value: "selectLeads" },
-    { label: "Approve", value: "approve" },
+  const tabs = [
+    { label: "Individual\nAssignment", value: "individual" },
+    { label: "Group\nAssignment", value: "group" },
   ];
-
-  const [tabs, setTabs] = useState(initialTabs);
-
-  useEffect(() => {
-    if (params.leads && params.leads.length > 0) {
-      setAssignedLeads(params.leads);
-      setTabs((prevTabs) =>
-        prevTabs.filter((tab) => tab.value !== "selectLeads")
-      );
-    }
-  }, [params.leads]);
 
   return (
     <SafeView>
       <AppHeader showDrawer={false} title="Assign Manager" />
       <Flex my={20}>
-        <Tabs onChange={(e) => setSteps(e)} tabs={tabs} value={steps} />
+        <Tabs onChange={(e) => setActiveTab(e)} tabs={tabs} value={activeTab} />
       </Flex>
 
-      {steps === "selectManager" && (
-        <SelectManagersTab
-          setTab={setSteps}
-          selectedManager={selectedManager}
-          setSelectedManager={setSelectedManager}
-          leads={assignedLeads}
-        />
-      )}
-      {steps === "selectLeads" && (
-        <SelectLeadsTab
-          setTab={setSteps}
-          assignedLeads={assignedLeads}
-          setAssignedLeads={setAssignedLeads}
-        />
-      )}
-      {steps === "approve" && selectedManager && (
-        <ApproveManagerTab
-          assignedLeads={assignedLeads}
-          selectedManager={selectedManager}
-        />
-      )}
+      {activeTab === "individual" && <IndividualAssignmentTab />}
+      {activeTab === "group" && <GroupAssignmentTab />}
     </SafeView>
   );
 };

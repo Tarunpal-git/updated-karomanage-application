@@ -6,9 +6,15 @@ import { store } from "../../../../app/store";
 type TStudentsListFilters = {
   studentStatus?: string;
   paymentStatus?: string;
-  courseName?: string;
-  batchName?: string;
-  // Future: paymentMode, paymentDate, admissionDate, etc.
+  paymentMode?: string;
+  paymentDateStart?: string;
+  paymentDateEnd?: string;
+  admissionDateStart?: string;
+  admissionDateEnd?: string;
+  courseName?: string; // Internal name, contains courseId value
+  batchName?: string; // Internal name, contains batchId value
+  courseId?: string; // API parameter name
+  batchId?: string; // API parameter name
 };
 
 const get = async (filters: TStudentsListFilters = {}) => {
@@ -34,12 +40,38 @@ const get = async (filters: TStudentsListFilters = {}) => {
     params.paymentStatus = filters.paymentStatus;
   }
 
-  if (filters.courseName) {
-    params.courseName = filters.courseName;
+  if (filters.paymentMode) {
+    params.paymentMode = filters.paymentMode;
   }
 
-  if (filters.batchName) {
-    params.batchName = filters.batchName;
+  if (filters.paymentDateStart) {
+    params.paymentReceiveDateFrom = filters.paymentDateStart;
+  }
+
+  if (filters.paymentDateEnd) {
+    params.paymentReceiveDateTo = filters.paymentDateEnd;
+  }
+
+  if (filters.admissionDateStart) {
+    params.admissionDateFrom = filters.admissionDateStart;
+  }
+
+  if (filters.admissionDateEnd) {
+    params.admissionDateTo = filters.admissionDateEnd;
+  }
+
+  // Support both courseName (legacy) and courseId (new)
+  if (filters.courseId) {
+    params.courseId = filters.courseId;
+  } else if (filters.courseName) {
+    params.courseId = filters.courseName; // courseName contains courseId value
+  }
+
+  // Support both batchName (legacy) and batchId (new)
+  if (filters.batchId) {
+    params.batchId = filters.batchId;
+  } else if (filters.batchName) {
+    params.batchId = filters.batchName; // batchName contains batchId value
   }
 
   const response = await request({

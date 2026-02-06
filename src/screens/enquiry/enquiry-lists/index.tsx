@@ -17,17 +17,17 @@ import { columns } from "./components/columns";
 import { TTableColumns } from "../../../types/table/tableColomuns";
 import FilterButton from "./components/FilterButton";
 import ActionPopover from "./components/ActionPopover";
-import { filteredEnquiryLists } from "./utils/filteredEnquiryLists";
 
 const EnquiryLists = () => {
   const navigation = useNavigation<TScreenNavigator>();
+  const [filters, setFilters] = useState({ search: "", status: "" });
   const { data, isLoading, refetch } = useEnquiryListsQuery();
   const isFocused = useIsFocused();
   const tableColumns = [...columns];
-  const [filters, setFilters] = useState({ search: "", status: "" });
 
   tableColumns.unshift({
     key: "action",
+    field: "action",
     label: "Action",
     minWidth: 80,
     renderCell: (row) => <ActionPopover refetch={refetch} row={row} />,
@@ -35,13 +35,79 @@ const EnquiryLists = () => {
   });
 
   const enquiries: TEnquiryData[] = useMemo(() => {
-    if (!isLoading && data) {
-      return filteredEnquiryLists(data?.dataArray, filters);
-    } else {
+    if (isLoading || !data?.data) {
       return [];
     }
+
+    // Filter out deleted leads (always exclude delete status)
+    const activeLeads = data.data.filter(
+      (lead: any) => lead.status !== "delete"
+    );
+
+    const mapped: TEnquiryData[] = activeLeads.map((lead: any) => ({
+      id: lead.id,
+      leadId: lead.leadId || lead.id, // Use leadId from API, fallback to id
+      studentName: lead.leadName || "",
+      enquiryCourse: lead.enquiryCourse || "",
+      mobileNumber: lead.leadMobileNumber || "",
+      email: lead.leadEmail || "",
+      courseDescription: lead.courseDescription || "",
+      // Show same status text as API response
+      status: lead.status || "",
+      visited: lead.visited ?? false,
+      followUp: [],
+      leadManager: {
+        managerName: lead.assigneLeadManagers?.managerName || "",
+      },
+    }));
+
+    // Apply search filter
+    const search = filters.search?.toLowerCase() ?? "";
+    let result = mapped.filter((item) => {
+      if (!search) return true;
+      return (
+        item.studentName.toLowerCase().includes(search) ||
+        item.email.toLowerCase().includes(search) ||
+        item.mobileNumber.includes(search)
+      );
+    });
+
+    // Apply status filter on client side based on API fields
+    const statusFilter = filters.status;
+    if (statusFilter) {
+      result = result.filter((item: any, index) => {
+        const original = activeLeads[index];
+        const lastFollowUpStatus =
+          original?.lastFollowUpStatus &&
+          String(original.lastFollowUpStatus).toLowerCase();
+        const status = String(original?.status || "").toLowerCase();
+
+        switch (statusFilter) {
+          case "active":
+            return status === "active";
+          case "inActive":
+            return status === "inactive" || status === "inactive ";
+          case "new":
+            return original?.visited === false;
+          case "pending":
+            return lastFollowUpStatus === "pending";
+          case "Interested":
+            return lastFollowUpStatus === "interested";
+          case "Not Interested":
+            return lastFollowUpStatus === "not interested";
+          case "Call Not Picked":
+            return lastFollowUpStatus === "call not picked";
+          case "Success Leads":
+            return status === "student";
+          default:
+            return true;
+        }
+      });
+    }
+
+    return result;
   }, [isLoading, data, filters]);
-console.log("Enquiry Lists Data:", enquiries);
+  console.log("Enquiry Lists Data:", enquiries);
   useEffect(() => {
     console.log("Enquiry Lists Data:", enquiries);
   }, [enquiries]);
@@ -96,7 +162,10 @@ console.log("Enquiry Lists Data:", enquiries);
           <GridTable
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             handleRowClick={(e: any) =>
-              navigation.navigate("EnquiryDetails", { id: e.id })
+              navigation.navigate("EnquiryDetails", { 
+                id: e.id,
+                leadId: e.leadId || e.id // Pass leadId if available, otherwise use id
+              })
             }
             data={enquiries}
             columns={tableColumns as TTableColumns<unknown>[]}

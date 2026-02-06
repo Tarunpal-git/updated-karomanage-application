@@ -8,7 +8,7 @@ export const studentUrls = {
   FETCH_STUDENT_DETAILS: STUDENT_PREFIX + "getStudentDetails",
   CHECK_ENROLLMENT: STUDENT_PREFIX + "checkEnrollment",
   STUDENT_ADMISSION: STUDENT_PREFIX + "studentAdmission",
-  UPDATE_STUDENT: STUDENT_PREFIX + "updateStudentDetails",
+  UPDATE_STUDENT: STUDENT_PREFIX + "updateStudentPersonalDetails",
   DELETE_STUDENT: STUDENT_PREFIX + "deleteStudentDetails",
   DELETE_STUDENT_COURSE: STUDENT_PREFIX + "deleteStudentCourse",
   ADD_COURSE_TO_STUDENT: STUDENT_PREFIX + "addCourseToStudent",

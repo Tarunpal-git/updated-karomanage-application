@@ -1,4 +1,5 @@
-import React, { useState, useMemo, useEffect } from "react";
+
+import React, { useState, useMemo, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -25,6 +26,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import { apiUrls } from "../../../../apis/urls";
 import { useSelector } from "react-redux";
 import { RootState } from "../../../../app/store";
+import { request } from "../../../../services/axios.service";
+import { store } from "../../../../app/store";
 import { COLORS } from "../../../../colors";
 import { TTimetableCell } from "./TimetableGrid";
 import { useNavigation } from "@react-navigation/native";
@@ -39,10 +42,11 @@ type SlotFormModalProps = {
   selectedBatch?: string;
   selectedBatchId?: string;
   batchData?: any;
-  onSuccess?: () => void; // Callback after successful creation
-  weekStart?: Date; // Week start date for refetch
-  selectedOrganization?: any; // Organization for refetch params
-  timeTableData?: any; // Timetable data for conflict validation
+  onSuccess?: () => void; 
+  weekStart?: Date; 
+  selectedOrganization?: any; 
+  timeTableData?: any; 
+  onNewSubjectCreated?: (subjectId: string, subjectName: string) => void; 
 };
 
 const PURPLE = "#6B57F2";
@@ -92,7 +96,7 @@ const isTimeOverlap = (start1: string, end1: string, start2: string, end2: strin
   const start2Min = timeToMinutes(start2);
   const end2Min = timeToMinutes(end2);
   
-  // Two slots overlap if: start1 < end2 AND end1 > start2
+  
   return start1Min < end2Min && end1Min > start2Min;
 };
 
@@ -109,6 +113,7 @@ const SlotFormModal = ({
   weekStart,
   selectedOrganization: propSelectedOrganization,
   timeTableData,
+  onNewSubjectCreated,
 }: SlotFormModalProps) => {
   console.log("📋 === SLOT FORM MODAL RENDERED ===");
   console.log("📋 visible:", visible);
@@ -117,60 +122,26 @@ const SlotFormModal = ({
   
   const navigation = useNavigation<TScreenNavigator>();
   
-  // ⭐ TEACHER LIST API
+
   const { data: teacherData } = useTeachersListQuery();
 
-  // ⭐ CLASSROOM LIST API
   const { data: classroomData } = useGetClassroomListQuery();
 
-  // ⭐ Selected batch info from batch list (basic info only, no courses)
+  
   const selectedBatchInfo = useMemo(() => {
     if (batchData?.statusCode === 200 && Array.isArray(batchData.data) && selectedBatchId) {
-      const found = batchData.data.find((b: any) => b.batchId === selectedBatchId) || null;
-      console.log("📋 selectedBatchInfo found:", found ? "yes" : "no");
-      console.log("📋 batchData:", batchData);
-      console.log("📋 selectedBatchId:", selectedBatchId);
-      return found;
+      return batchData.data.find((b: any) => b.batchId === selectedBatchId) || null;
     }
-    console.warn("⚠️ selectedBatchInfo not found - batchData status:", batchData?.statusCode, "isArray:", Array.isArray(batchData?.data), "selectedBatchId:", selectedBatchId);
     return null;
   }, [batchData, selectedBatchId]);
 
-  // ⭐ BATCH DETAILS API (full batch data with courses array)
-  // Fetch batch details to get courseId (batch list doesn't include courses array)
-  const { data: batchDetailsData, isLoading: isBatchDetailsLoading } = useBatchDetailsQuery({
+  const courseId = selectedBatchInfo?.courses?.[0]?.courseId || "";
+
+  const { data: batchDetailsData } = useBatchDetailsQuery({
     batchId: selectedBatchId || "",
   });
 
-  // ⭐ Get courseId from batch details (which has courses array)
-  const courseId = useMemo(() => {
-    // First try to get from batch details (which has full data including courses)
-    if (batchDetailsData?.statusCode === 200 && batchDetailsData?.data?.courses?.length > 0) {
-      const courseIdFromDetails = batchDetailsData.data.courses[0].courseId;
-      console.log("✅ courseId from batchDetails:", courseIdFromDetails);
-      return courseIdFromDetails;
-    }
-    // Fallback: try from batch list (though it usually doesn't have courses)
-    const courseIdFromList = selectedBatchInfo?.courses?.[0]?.courseId || "";
-    if (courseIdFromList) {
-      console.log("✅ courseId from batchList:", courseIdFromList);
-      return courseIdFromList;
-    }
-    console.warn("⚠️ courseId not found in batchDetails or batchList");
-    return "";
-  }, [batchDetailsData, selectedBatchInfo]);
-  
-  // Debug logging for courseId
-  useEffect(() => {
-    if (visible) {
-      console.log("📋 CourseId derived:", courseId);
-      console.log("📋 batchDetailsData:", batchDetailsData);
-      console.log("📋 batchDetailsData?.data?.courses:", batchDetailsData?.data?.courses);
-      console.log("📋 selectedBatchInfo?.courses:", selectedBatchInfo?.courses);
-    }
-  }, [courseId, visible, batchDetailsData, selectedBatchInfo]);
 
-  // ⭐ COURSE DETAIL API (subjects ke liye)
   const { data: courseDetailData } = useCourseDetailsQuery({
     courseId: courseId || "",
   });
@@ -182,15 +153,23 @@ const SlotFormModal = ({
   const [startTime, setStartTime] = useState("");
   const [endTime, setEndTime] = useState("");
   const [repeat, setRepeat] = useState(true);
+  
 
-  // ⭐ Cascading dropdown states
+  const newlyCreatedSubjectsRef = useRef<Map<string, string>>(new Map());
+  
+
+  const [addSubjectModalVisible, setAddSubjectModalVisible] = useState(false);
+  const [selectedSubjectForBatch, setSelectedSubjectForBatch] = useState("");
+  const [subjectModalMode, setSubjectModalMode] = useState<"select" | "create">("select");
+  const [newSubjectName, setNewSubjectName] = useState("");
+
   const [subjectDropdownOpen, setSubjectDropdownOpen] = useState(false);
   const [teacherDropdownOpen, setTeacherDropdownOpen] = useState(false);
   const [roomDropdownOpen, setRoomDropdownOpen] = useState(false);
   const [startTimeDropdownOpen, setStartTimeDropdownOpen] = useState(false);
   const [endTimeDropdownOpen, setEndTimeDropdownOpen] = useState(false);
 
-  // ⭐ TEACHER OPTIONS for Picker
+
   const teacherOptions = useMemo(() => {
     if (teacherData?.statuscode === 200 && Array.isArray(teacherData.data)) {
       return teacherData.data.map((t: any) => ({
@@ -201,7 +180,7 @@ const SlotFormModal = ({
     return [];
   }, [teacherData]);
 
-  // ⭐ CLASSROOM OPTIONS for Picker
+ 
   const classroomOptions = useMemo(() => {
     if (classroomData?.statusCode === 200 && classroomData.data?.classRooms) {
       return classroomData.data.classRooms.map((room: any) => ({
@@ -212,19 +191,68 @@ const SlotFormModal = ({
     return [];
   }, [classroomData]);
 
-  // ⭐ SUBJECT OPTIONS from Course Detail API
+  
   const subjectOptions = useMemo(() => {
     if (courseDetailData?.data?.subjects && Array.isArray(courseDetailData.data.subjects)) {
-      return courseDetailData.data.subjects.map((s: any) => ({
+      // Get assigned subject IDs from batch details
+      const batchAssignedSubjectIds: string[] = [];
+      if (batchDetailsData?.data?.subjects && Array.isArray(batchDetailsData.data.subjects) && batchDetailsData.data.subjects.length > 0) {
+        // Extract subject IDs from batch
+        batchAssignedSubjectIds.push(
+          ...batchDetailsData.data.subjects.map((s: any) => 
+            s.subjectId || s.id || s
+          )
+        );
+      }
+      
+     
+      const allCourseSubjects = courseDetailData.data.subjects.map((s: any) => ({
         value: s.subjectId,
         label: s.subjectName,
       }));
+      
+
+      if (batchAssignedSubjectIds.length > 0) {
+        return allCourseSubjects.filter((subject: { value: string; label: string }) =>
+          batchAssignedSubjectIds.includes(subject.value)
+        );
+      }
+      
+
+      return [];
     }
     return [];
-  }, [courseDetailData]);
+  }, [courseDetailData, batchDetailsData]);
 
   const courseName = courseDetailData?.data?.courseName || selectedBatchInfo?.courses?.[0]?.courseName || "Course";
   const batchName = selectedBatchInfo?.batchName || selectedBatch || "Batch";
+
+
+  const unassignedSubjectOptions = useMemo(() => {
+    if (courseDetailData?.data?.subjects && Array.isArray(courseDetailData.data.subjects)) {
+      
+      const batchAssignedSubjectIds: string[] = [];
+      if (batchDetailsData?.data?.subjects && Array.isArray(batchDetailsData.data.subjects)) {
+        batchAssignedSubjectIds.push(
+          ...batchDetailsData.data.subjects.map((s: any) => 
+            s.subjectId || s.id || s
+          )
+        );
+      }
+      
+      // Get all course subjects
+      const allCourseSubjects = courseDetailData.data.subjects.map((s: any) => ({
+        value: s.subjectId,
+        label: s.subjectName,
+      }));
+      
+      // Filter to show only unassigned subjects (not in batch)
+      return allCourseSubjects.filter((subject: { value: string; label: string }) =>
+        !batchAssignedSubjectIds.includes(subject.value)
+      );
+    }
+    return [];
+  }, [courseDetailData, batchDetailsData]);
 
   const combinedSubjectOptions = useMemo(
     () => [...subjectOptions, ...customSubjects],
@@ -366,6 +394,25 @@ const SlotFormModal = ({
     }
   }, [editingSlot, visible, isEditMode]);
 
+  // ⭐ Clean up customSubjects and ref when subjects appear in subjectOptions (after refetch)
+  useEffect(() => {
+    if (subjectOptions.length > 0) {
+      const subjectOptionIds = new Set<string>(subjectOptions.map((s: { value: string; label: string }) => s.value));
+      
+      // Clean up customSubjects
+      if (customSubjects.length > 0) {
+        setCustomSubjects((prev: { value: string; label: string }[]) => 
+          prev.filter((s: { value: string; label: string }) => !subjectOptionIds.has(s.value))
+        );
+      }
+      
+      // Clean up ref - remove subjects that are now in subjectOptions
+      subjectOptionIds.forEach((subjectId) => {
+        newlyCreatedSubjectsRef.current.delete(subjectId);
+      });
+    }
+  }, [subjectOptions, customSubjects.length]);
+
   // ⭐ Log state values when they change (for debugging)
   useEffect(() => {
     if (visible && isEditMode) {
@@ -429,6 +476,528 @@ const SlotFormModal = ({
   const queryClient = useQueryClient();
   const updateCourseMutation = useUpdateCourseMutation();
   const updateBatchMutation = useUpdateBatchMutation();
+
+ 
+  const handleCreateAndAssignSubject = async () => {
+    const trimmedSubjectName = newSubjectName?.trim();
+    
+    if (!trimmedSubjectName) {
+      Alert.alert("Error", "Please enter a subject name");
+      return;
+    }
+
+    if (!courseId) {
+      Alert.alert("Error", "Course ID not found");
+      return;
+    }
+
+    // Get current course subjects with proper structure - include ALL existing subjects with their IDs and dates
+    // This matches the web payload format where existing subjects have subjectId and dateCreated
+    const currentCourseSubjects = (courseDetailData?.data?.subjects || [])
+      .filter((s: any) => s.subjectId && !s.subjectId.startsWith('temp_') && !s.subjectId.startsWith('temp-'))
+      .map((s: any) => ({
+        subjectId: s.subjectId, // Must include for existing subjects
+        subjectName: s.subjectName,
+        subjectDescription: s.subjectDescription || "",
+        dateCreated: s.dateCreated || Date.now(), // Must include for existing subjects
+      }));
+
+    // Create new subject object with temporary ID (like web portal does)
+    // Web portal format: 5-character alphanumeric (lowercase letters + numbers)
+    // Examples: "rh5my", "nz1yq", "ojy4z", "s3r3u"
+    const generateTemporarySubjectId = () => {
+      // Generate 5-character alphanumeric ID (like web portal)
+      // Characters: a-z (lowercase) and 0-9
+      const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+      let result = '';
+      
+      // Generate 5 random characters
+      for (let i = 0; i < 5; i++) {
+        const randomIndex = Math.floor(Math.random() * chars.length);
+        result += chars[randomIndex];
+      }
+      
+      return result; // Example: "rh5my", "nz1yq", etc.
+    };
+    
+    const temporarySubjectId = generateTemporarySubjectId();
+    const currentTimestamp = Date.now();
+    
+    // Create new subject object with temporary ID (backend will replace with real ID)
+    // This helps us track the subject in the response
+    const newSubject = {
+      subjectId: temporarySubjectId, // Temporary ID for tracking
+      subjectName: trimmedSubjectName, // Ensure it's properly trimmed
+      subjectDescription: "",
+      dateCreated: currentTimestamp, // Temporary timestamp
+    };
+    
+    console.log("📝 Generated temporary subjectId:", temporarySubjectId);
+    console.log("📝 This temporary ID will help us track the subject in response");
+
+    // Prepare course update payload with new subject
+    const courseUpdatePayload = {
+      courseId: courseId,
+      courseName: courseDetailData?.data?.courseName || "",
+      courseDescription: courseDetailData?.data?.courseDescription || "",
+      courseFee: courseDetailData?.data?.courseFee || 0,
+      courseFeeDescription: courseDetailData?.data?.courseFeeDescription || "",
+      courseDurationYear: courseDetailData?.data?.courseDuration 
+        ? Math.floor(courseDetailData.data.courseDuration / 12) 
+        : 0,
+      courseDurationMonth: courseDetailData?.data?.courseDuration 
+        ? courseDetailData.data.courseDuration % 12 
+        : 0,
+      maxPaymentInstallment: courseDetailData?.data?.maxPaymentInstallment || 2,
+      mode: courseDetailData?.data?.mode || "offline",
+      courseStatus: courseDetailData?.data?.courseStatus || "active",
+      subjects: [...currentCourseSubjects, newSubject],
+    };
+
+    console.log("📝 Creating subject with name:", trimmedSubjectName);
+    console.log("📝 Course update payload:", JSON.stringify(courseUpdatePayload, null, 2));
+
+    try {
+      // First, add subject to course
+      const courseResponse = await updateCourseMutation.mutateAsync(courseUpdatePayload);
+      
+      console.log("📝 Course update response:", JSON.stringify(courseResponse, null, 2));
+      
+      if (courseResponse?.statusCode === 200) {
+        console.log("📝 Course updated successfully");
+        
+        // Get subjects from updateCourse response
+        const updatedSubjects = courseResponse?.data?.subjects || [];
+        console.log("📝 Updated subjects from response:", updatedSubjects);
+        console.log("📝 Looking for subject with name:", trimmedSubjectName);
+        
+        // Helper function to find subjectId from subjects array
+        // Strategy: First try to find by temporary ID, then by name, then by newest
+        const findSubjectId = (subjects: any[]): string | null => {
+          console.log("🔍 Finding subjectId with temporary ID:", temporarySubjectId);
+          console.log("🔍 Subject name:", trimmedSubjectName);
+          
+          
+          const subjectByTempId = subjects.find(
+            (s: any) => s.subjectId === temporarySubjectId
+          );
+          
+          if (subjectByTempId) {
+            // If backend returned the same ID, it might be temporary or real
+            // But if it matches our temporary ID exactly, we can use it for tracking
+            // Backend will eventually replace it with a real ID (or might keep it if it's unique)
+            // For now, we'll use it and let backend handle the ID generation
+            console.log("✅ Found subject by temporary ID match:", subjectByTempId.subjectId);
+            console.log("📝 Note: Backend may replace this with a real ID, or keep it if unique");
+            // We'll still use this ID, but also try to find a newer real ID
+            // Continue to other strategies to find the real ID
+          }
+          
+          // Strategy 2: Find by exact name match with ID (5-character alphanumeric format)
+          // Since temporary ID is also 5-character, we need to check if it's in our original list
+          const existingSubjectIds = new Set(
+            currentCourseSubjects.map((s: any) => s.subjectId).filter((id: any) => id)
+          );
+          
+          const createdSubject = subjects.find(
+            (s: any) => {
+              const nameMatch = s.subjectName?.trim() === trimmedSubjectName;
+              const hasId = s.subjectId && s.subjectId.length === 5; // 5-character alphanumeric
+              // If ID is not in existing list, it's likely the new subject
+              const isNew = hasId && !existingSubjectIds.has(s.subjectId);
+              return nameMatch && hasId && isNew;
+            }
+          );
+          
+          if (createdSubject?.subjectId) {
+            console.log("✅ Found real ID by name match:", createdSubject.subjectId);
+            return createdSubject.subjectId;
+          }
+          
+          // Strategy 3: Find the newest subject with matching name (5-character alphanumeric ID)
+          const matchingSubjects = subjects.filter(
+            (s: any) => {
+              const nameMatch = s.subjectName?.trim() === trimmedSubjectName;
+              const hasId = s.subjectId && s.subjectId.length === 5; // 5-character alphanumeric
+              const isNew = hasId && !existingSubjectIds.has(s.subjectId);
+              return nameMatch && hasId && isNew;
+            }
+          );
+          
+          if (matchingSubjects.length > 0) {
+            // Sort by dateCreated descending (newest first) and get the first one
+            const sorted = matchingSubjects.sort((a: any, b: any) => {
+              return (b.dateCreated || 0) - (a.dateCreated || 0);
+            });
+            const foundId = sorted[0]?.subjectId || null;
+            if (foundId) {
+              console.log("✅ Found real ID by newest match:", foundId);
+            }
+            return foundId;
+          }
+          
+          // Strategy 4: Find any new subject (not in original list) with 5-character ID
+          const newSubjects = subjects.filter(
+            (s: any) => {
+              const hasId = s.subjectId && s.subjectId.length === 5; // 5-character alphanumeric
+              const isNew = hasId && !existingSubjectIds.has(s.subjectId);
+              return hasId && isNew;
+            }
+          );
+          
+          if (newSubjects.length > 0) {
+            // Prefer matching name, otherwise get newest
+            const foundId = newSubjects.find(
+              (s: any) => s.subjectName?.trim() === trimmedSubjectName
+            )?.subjectId || newSubjects.sort((a: any, b: any) => {
+              return (b.dateCreated || 0) - (a.dateCreated || 0);
+            })[0]?.subjectId || null;
+            
+            if (foundId) {
+              console.log("✅ Found real ID by new subject match:", foundId);
+            }
+            return foundId;
+          }
+          
+          console.log("❌ Could not find real ID using any strategy");
+          return null;
+        };
+        
+        // Try to find subjectId from updateCourse response first
+        let newSubjectId = findSubjectId(updatedSubjects);
+        
+        
+        if (!newSubjectId) {
+          console.log("⚠️ SubjectId not found in updateCourse response, fetching singleCourseDetails...");
+          console.log("📋 Reason: Backend is still processing the new subject creation");
+          console.log("📋 Solution: Fetching latest data from database using singleCourseDetails API");
+          
+          const organization = store.getState().auth.selectedOrganization;
+          const maxRetries = 5;
+          const retryDelays = [500, 1000, 1500, 2000, 2500]; // Increasing delays in ms
+          
+          for (let attempt = 0; attempt < maxRetries; attempt++) {
+            try {
+              // Wait before retry (except first attempt)
+              // पहले attempt में तुरंत try करते हैं, बाकी में delay के साथ
+              if (attempt > 0) {
+                console.log(`⏳ Waiting ${retryDelays[attempt - 1]}ms before retry ${attempt + 1}...`);
+                console.log(`⏳ Reason: Giving backend more time to process and generate subjectId`);
+                await new Promise(resolve => setTimeout(resolve, retryDelays[attempt - 1]));
+              }
+              
+              console.log(`🔄 Fetching singleCourseDetails (attempt ${attempt + 1}/${maxRetries})...`);
+              console.log(`🔄 This API fetches latest data directly from database`);
+              
+              // singleCourseDetails API call - यह database से directly latest data fetch करता है
+              const courseDetailsResponse = await request({
+                url: apiUrls.course.FETCH_COURSE_DETAILS,
+                method: "POST",
+                data: {
+                  courseId: courseId,
+                  customerId: organization?.customerId,
+                  organizationId: organization?.organizationId,
+                },
+              });
+              
+              console.log(`📋 singleCourseDetails response (attempt ${attempt + 1}):`, JSON.stringify(courseDetailsResponse, null, 2));
+              
+              // Check if response is valid and has subjects array
+              if (courseDetailsResponse?.statusCode === 200 && courseDetailsResponse?.data?.subjects) {
+                const fetchedSubjects = courseDetailsResponse.data.subjects;
+                console.log(`📋 Total subjects found: ${fetchedSubjects.length}`);
+                
+                // Try to find subjectId using helper function
+                newSubjectId = findSubjectId(fetchedSubjects);
+                
+                if (newSubjectId) {
+                  console.log(`✅ Successfully found subject ID on attempt ${attempt + 1}:`, newSubjectId);
+                  console.log(`✅ Subject name: "${trimmedSubjectName}"`);
+                  console.log(`✅ Backend processing completed, subjectId is now available`);
+                  break; // Exit retry loop - success!
+                } else {
+                  console.log(`⚠️ SubjectId still not found in attempt ${attempt + 1}`);
+                  console.log(`⚠️ Backend might still be processing, will retry...`);
+                  
+                  // Log all subjects for debugging
+                  console.log(`📋 All subjects in response:`, fetchedSubjects.map((s: any) => ({
+                    name: s.subjectName,
+                    id: s.subjectId,
+                    dateCreated: s.dateCreated
+                  })));
+                }
+              } else {
+                console.log(`⚠️ Invalid response in attempt ${attempt + 1}`);
+                console.log(`⚠️ Status code: ${courseDetailsResponse?.statusCode}`);
+                console.log(`⚠️ Has subjects: ${!!courseDetailsResponse?.data?.subjects}`);
+              }
+            } catch (error: any) {
+              console.error(`❌ Error fetching singleCourseDetails (attempt ${attempt + 1}):`, error);
+              console.error(`❌ Error details:`, error?.response?.data || error?.message);
+              // Continue to next retry - don't give up yet
+            }
+          }
+        }
+        
+        if (!newSubjectId) {
+          console.error("❌ Could not find created subject ID after all retries");
+          console.error("❌ All subjects in updateCourse response:", updatedSubjects);
+          console.error("❌ Looking for name:", trimmedSubjectName);
+          Alert.alert(
+            "Error", 
+            `Subject "${trimmedSubjectName}" was created but the ID could not be retrieved after multiple attempts. Please refresh and try again.`,
+            [
+              {
+                text: "OK",
+                onPress: () => {
+                  queryClient.invalidateQueries({
+                    predicate: (query) => {
+                      return query.queryKey[0] === apiUrls.course.FETCH_COURSE_DETAILS;
+                    },
+                  });
+                  setAddSubjectModalVisible(false);
+                  setSubjectModalMode("select");
+                  setNewSubjectName("");
+                },
+              },
+            ]
+          );
+          return;
+        }
+        
+        console.log("✅ Successfully found subject ID:", newSubjectId);
+
+        // Now assign this new subject to batch
+        const batchInfo = selectedBatchInfo || batchDetailsData?.data;
+        if (!batchInfo) {
+          Alert.alert("Error", "Batch information not found");
+          return;
+        }
+
+        // Get current batch subjects - preserve existing structure (string or object format)
+        // According to API, subjects can be: string (subjectId) OR object {subjectId, startTime, endTime, teacherId}
+        const currentBatchSubjects: (string | any)[] = [];
+        if (batchDetailsData?.data?.subjects && Array.isArray(batchDetailsData.data.subjects)) {
+          batchDetailsData.data.subjects.forEach((s: any) => {
+            if (typeof s === "string") {
+              // If it's a string, keep it as string
+              currentBatchSubjects.push(s);
+            } else if (s.subjectId) {
+              // If it's an object, preserve the object structure
+              currentBatchSubjects.push({
+                subjectId: s.subjectId,
+                startTime: s.startTime || null,
+                endTime: s.endTime || null,
+                teacherId: s.teacherId || "",
+              });
+            } else if (s.id) {
+              // Fallback: if only id exists, convert to string
+              currentBatchSubjects.push(s.id);
+            }
+          });
+        }
+
+        // Add new subject ID - check if it's already present
+        const isAlreadyPresent = currentBatchSubjects.some((s: any) => {
+          if (typeof s === "string") {
+            return s === newSubjectId;
+          } else if (s.subjectId) {
+            return s.subjectId === newSubjectId;
+          }
+          return false;
+        });
+
+        if (!isAlreadyPresent) {
+          // Add new subject as object format (matching API structure)
+          currentBatchSubjects.push({
+            subjectId: newSubjectId,
+            startTime: null,
+            endTime: null,
+            teacherId: "",
+          });
+        }
+
+        const batchUpdatePayload = {
+          batchId: selectedBatchId,
+          batchName: batchInfo.batchName || batchName,
+          batchDescription: batchInfo.batchDescription || "",
+          batchStartDate: batchInfo.batchStartDate || "",
+          batchEndDate: batchInfo.batchEndDate || "",
+          setBatchTime: batchInfo.batchClassStartTime ? "Yes" : "No",
+          batchClassStartTime: batchInfo.batchClassStartTime || "",
+          batchClassEndTime: batchInfo.batchClassEndTime || "",
+          batchStatus: batchInfo.batchStatus || "active",
+          subjects: currentBatchSubjects, // Array with mixed format: strings and objects
+          batchDetails: batchInfo, // Pass complete batch details for mutation
+          courses: batchInfo.courses || selectedBatchInfo?.courses || [],
+          students: batchInfo.students || [],
+          teacher: batchInfo.teacher || [],
+        };
+
+        console.log("📝 Batch update payload:", JSON.stringify(batchUpdatePayload, null, 2));
+
+        const batchResponse = await updateBatchMutation.mutateAsync(batchUpdatePayload);
+        
+        console.log("📝 Batch update response:", JSON.stringify(batchResponse, null, 2));
+        
+        if (batchResponse?.statusCode === 200) {
+          Alert.alert("Success", "Subject created and assigned to batch successfully");
+          
+          // Invalidate ALL related queries to refresh data
+          queryClient.invalidateQueries({
+            predicate: (query) => {
+              return query.queryKey[0] === apiUrls.batch.FETCH_BATCH_DETAILS;
+            },
+          });
+          queryClient.invalidateQueries({
+            predicate: (query) => {
+              return query.queryKey[0] === apiUrls.batch.FETCH_BATCHES_LIST;
+            },
+          });
+          queryClient.invalidateQueries({
+            predicate: (query) => {
+              return query.queryKey[0] === apiUrls.batch.FETCH_BATCHES_LIST_NEW;
+            },
+          });
+          // Invalidate singleCourseDetails (FETCH_COURSE_DETAILS) query
+          queryClient.invalidateQueries({
+            predicate: (query) => {
+              return query.queryKey[0] === apiUrls.course.FETCH_COURSE_DETAILS;
+            },
+          });
+          
+          // Refetch course details to update singleCourseDetails data
+          if (courseId) {
+            queryClient.refetchQueries({
+              queryKey: [apiUrls.course.FETCH_COURSE_DETAILS, { courseId }],
+            });
+          }
+          
+          // Refetch batch details to get updated subject list
+          if (selectedBatchId) {
+            queryClient.refetchQueries({
+              predicate: (query) => {
+                const queryKey = query.queryKey[0];
+                const queryParams = query.queryKey[1] as any;
+                return queryKey === apiUrls.batch.FETCH_BATCH_DETAILS && 
+                       queryParams?.batchId === selectedBatchId;
+              },
+            });
+          }
+          
+          // Store newly created subject name in ref for immediate display (before state updates)
+          newlyCreatedSubjectsRef.current.set(newSubjectId, trimmedSubjectName);
+          
+          // Notify parent component (TimetableView) about newly created subject
+          // This updates the subjectMap in TimetableGrid so subject name shows immediately
+          if (onNewSubjectCreated) {
+            onNewSubjectCreated(newSubjectId, trimmedSubjectName);
+          }
+          
+          // Add newly created subject to customSubjects immediately so it shows up right away
+          // This prevents showing subject ID instead of name before refetch completes
+          setCustomSubjects((prev) => {
+            // Check if subject already exists in customSubjects to avoid duplicates
+            const exists = prev.some((s) => s.value === newSubjectId);
+            if (!exists) {
+              return [...prev, { value: newSubjectId, label: trimmedSubjectName }];
+            }
+            return prev;
+          });
+          
+          // Close modal and reset
+          setAddSubjectModalVisible(false);
+          setSubjectModalMode("select");
+          setNewSubjectName("");
+          setSelectedSubjectForBatch("");
+          
+          // Set the new subject in the form immediately
+          setSelectedSubject(newSubjectId);
+        } else {
+          Alert.alert("Error", batchResponse?.message || "Subject created but failed to assign to batch");
+        }
+      } else {
+        Alert.alert("Error", courseResponse?.message || "Failed to create subject");
+      }
+    } catch (error: any) {
+      console.error("❌ Error creating subject:", error);
+      console.error("❌ Error details:", JSON.stringify(error, null, 2));
+      Alert.alert("Error", error?.response?.data?.message || "Failed to create subject");
+    }
+  };
+
+  // ⭐ HANDLE: Assign subject to batch
+  const handleAssignSubjectToBatch = async () => {
+    if (!selectedSubjectForBatch || !selectedBatchId) {
+      Alert.alert("Error", "Please select a subject");
+      return;
+    }
+
+    // Get current batch subjects
+    const currentBatchSubjects: string[] = [];
+    if (batchDetailsData?.data?.subjects && Array.isArray(batchDetailsData.data.subjects)) {
+      currentBatchSubjects.push(
+        ...batchDetailsData.data.subjects.map((s: any) => 
+          s.subjectId || s.id || s
+        )
+      );
+    }
+
+    // Add new subject if not already present
+    if (!currentBatchSubjects.includes(selectedSubjectForBatch)) {
+      currentBatchSubjects.push(selectedSubjectForBatch);
+    }
+
+    // Get batch data for update
+    const batchInfo = selectedBatchInfo || batchDetailsData?.data;
+    if (!batchInfo) {
+      Alert.alert("Error", "Batch information not found");
+      return;
+    }
+
+    // Prepare update payload
+    const updatePayload = {
+      batchId: selectedBatchId,
+      batchName: batchInfo.batchName || batchName,
+      batchStartDate: batchInfo.batchStartDate || "",
+      batchEndDate: batchInfo.batchEndDate || "",
+      setBatchTime: batchInfo.batchClassStartTime ? "Yes" : "No",
+      batchClassStartTime: batchInfo.batchClassStartTime || "",
+      batchClassEndTime: batchInfo.batchClassEndTime || "",
+      batchStatus: batchInfo.batchStatus || "active",
+      subjects: currentBatchSubjects, // Array of subject IDs
+    };
+
+    try {
+      const response = await updateBatchMutation.mutateAsync(updatePayload);
+      if (response?.statusCode === 200) {
+        Alert.alert("Success", "Subject assigned to batch successfully");
+        // Invalidate batch details query to refetch
+        queryClient.invalidateQueries({
+          predicate: (query) => {
+            return query.queryKey[0] === apiUrls.batch.FETCH_BATCH_DETAILS;
+          },
+        });
+        // Also invalidate batch list to refresh
+        queryClient.invalidateQueries({
+          predicate: (query) => {
+            return query.queryKey[0] === apiUrls.batch.FETCH_BATCHES_LIST;
+          },
+        });
+        // Close modal and reset
+        setAddSubjectModalVisible(false);
+        const assignedSubjectId = selectedSubjectForBatch;
+        setSelectedSubjectForBatch("");
+        // Also set the selected subject in the form
+        setSelectedSubject(assignedSubjectId);
+      } else {
+        Alert.alert("Error", response?.message || "Failed to assign subject to batch");
+      }
+    } catch (error: any) {
+      console.error("Error assigning subject to batch:", error);
+      Alert.alert("Error", error?.response?.data?.message || "Failed to assign subject to batch");
+    }
+  };
 
   // ⭐ HELPER: Handle success response (refetch and close modal)
   const handleSuccessResponse = (response: any, isEdit: boolean) => {
@@ -1011,6 +1580,7 @@ const SlotFormModal = ({
           {/* Title */}
           <Text style={styles.title}>
             {isEditMode ? "Update Slot" : `Add New Slot for ${selectedBatch}`}
+            
           </Text>
 
           {/* SUBJECT */}
@@ -1020,18 +1590,19 @@ const SlotFormModal = ({
               style={styles.dropdownBox}
               onPress={() => {
                 setSubjectDropdownOpen(!subjectDropdownOpen);
-                if (subjectDropdownOpen) {
-                  setTeacherDropdownOpen(false);
-                  setRoomDropdownOpen(false);
-                  setStartTimeDropdownOpen(false);
-                  setEndTimeDropdownOpen(false);
-                }
+                // Always close other dropdowns when subject dropdown opens
+                setTeacherDropdownOpen(false);
+                setRoomDropdownOpen(false);
+                setStartTimeDropdownOpen(false);
+                setEndTimeDropdownOpen(false);
               }}
             >
               <View style={styles.dropdownContent}>
                 <Text style={[styles.dropdownText, !selectedSubject && styles.dropdownPlaceholder]}>
                   {selectedSubject 
-                    ? combinedSubjectOptions.find((s: { value: string; label: string }) => s.value === selectedSubject)?.label 
+                    ? (combinedSubjectOptions.find((s: { value: string; label: string }) => s.value === selectedSubject)?.label 
+                        || newlyCreatedSubjectsRef.current.get(selectedSubject) 
+                        || selectedSubject)
                     : "Select subject"}
                 </Text>
                 <Text style={styles.dropdownArrow}>{subjectDropdownOpen ? "▲" : "▼"}</Text>
@@ -1041,21 +1612,10 @@ const SlotFormModal = ({
             <TouchableOpacity
               style={styles.plusBtn}
               onPress={() => {
-                console.log("➕ Subject + button pressed");
-                console.log("➕ courseId:", courseId);
-                console.log("➕ selectedBatchInfo:", selectedBatchInfo);
-                console.log("➕ selectedBatchId:", selectedBatchId);
-                
-                if (courseId) {
-                  onClose(); // Close slot form modal first
-                  // Use requestAnimationFrame to ensure modal closes before navigation
-                  requestAnimationFrame(() => {
-                    console.log("🚀 Navigating to CourseDetails with courseId:", courseId);
-                    navigation.navigate("CourseDetails", { courseId, autoOpenEdit: true });
-                  });
+                if (courseId && selectedBatchId) {
+                  setAddSubjectModalVisible(true);
                 } else {
-                  console.error("❌ Course ID not found. selectedBatchInfo:", selectedBatchInfo);
-                  Alert.alert("Error", "Course ID not found. Please select a batch first.");
+                  Alert.alert("Error", "Course ID or Batch ID not found. Please select a batch first.");
                 }
               }}
             >
@@ -1076,6 +1636,15 @@ const SlotFormModal = ({
                         style={[styles.cascadingDropdownItem, isSelected && styles.cascadingDropdownItemSelected]}
                         onPress={() => {
                           setSelectedSubject(subject.value);
+                          setSubjectDropdownOpen(false);
+                          // If astrology is selected, automatically open teacher dropdown
+                          const subjectLabel = subject.label?.toLowerCase() || "";
+                          if (subjectLabel.includes("astrology")) {
+                            setTeacherDropdownOpen(true);
+                            setRoomDropdownOpen(false);
+                            setStartTimeDropdownOpen(false);
+                            setEndTimeDropdownOpen(false);
+                          }
                         }}
                       >
                         <Text style={[styles.cascadingDropdownItemText, isSelected && styles.cascadingDropdownItemTextSelected]}>
@@ -1101,11 +1670,11 @@ const SlotFormModal = ({
               onPress={() => {
                 if (selectedSubject) {
                   setTeacherDropdownOpen(!teacherDropdownOpen);
-                  if (teacherDropdownOpen) {
-                    setRoomDropdownOpen(false);
-                    setStartTimeDropdownOpen(false);
-                    setEndTimeDropdownOpen(false);
-                  }
+                  // Always close other dropdowns when teacher dropdown opens
+                  setSubjectDropdownOpen(false);
+                  setRoomDropdownOpen(false);
+                  setStartTimeDropdownOpen(false);
+                  setEndTimeDropdownOpen(false);
                 }
               }}
               disabled={!selectedSubject}
@@ -1136,6 +1705,7 @@ const SlotFormModal = ({
           {/* Teacher Dropdown List */}
           {teacherDropdownOpen && selectedSubject && (
             <View style={styles.cascadingDropdown}>
+              <Text style={styles.cascadingDropdownTitle}>Select teacher</Text>
               <ScrollView style={styles.cascadingDropdownList} nestedScrollEnabled>
                 {teacherOptions.length > 0 ? (
                   teacherOptions.map((teacher: { value: string; label: string }) => {
@@ -1156,7 +1726,7 @@ const SlotFormModal = ({
                   })
                 ) : (
                   <View style={styles.cascadingDropdownItem}>
-                    <Text style={styles.cascadingDropdownItemText}>Data not found</Text>
+                    <Text style={styles.cascadingDropdownItemText}>No teachers found</Text>
                   </View>
                 )}
               </ScrollView>
@@ -1171,10 +1741,11 @@ const SlotFormModal = ({
               onPress={() => {
                 if (selectedTeacher) {
                   setRoomDropdownOpen(!roomDropdownOpen);
-                  if (roomDropdownOpen) {
-                    setStartTimeDropdownOpen(false);
-                    setEndTimeDropdownOpen(false);
-                  }
+                  // Always close other dropdowns when room dropdown opens
+                  setSubjectDropdownOpen(false);
+                  setTeacherDropdownOpen(false);
+                  setStartTimeDropdownOpen(false);
+                  setEndTimeDropdownOpen(false);
                 }
               }}
               disabled={!selectedTeacher}
@@ -1234,9 +1805,11 @@ const SlotFormModal = ({
             onPress={() => {
               if (selectedRoom) {
                 setStartTimeDropdownOpen(!startTimeDropdownOpen);
-                if (startTimeDropdownOpen) {
-                  setEndTimeDropdownOpen(false);
-                }
+                // Always close other dropdowns when start time dropdown opens
+                setSubjectDropdownOpen(false);
+                setTeacherDropdownOpen(false);
+                setRoomDropdownOpen(false);
+                setEndTimeDropdownOpen(false);
               }
             }}
             disabled={!selectedRoom}
@@ -1285,6 +1858,11 @@ const SlotFormModal = ({
             onPress={() => {
               if (startTime) {
                 setEndTimeDropdownOpen(!endTimeDropdownOpen);
+                // Always close other dropdowns when end time dropdown opens
+                setSubjectDropdownOpen(false);
+                setTeacherDropdownOpen(false);
+                setRoomDropdownOpen(false);
+                setStartTimeDropdownOpen(false);
               }
             }}
             disabled={!startTime}
@@ -1331,16 +1909,15 @@ const SlotFormModal = ({
           <View style={styles.repeatRow}>
             <Text style={styles.repeatLabel}>Schedule Days</Text>
             <Switch
-              value={repeat}
-              onValueChange={setRepeat}
+              value={true}
+              disabled={true}
               thumbColor="#FFF"
               trackColor={{ true: COLORS.primary, false: "#CCC" }}
             />
           </View>
 
           {/* SELECT DAYS */}
-          {/* SELECT DAYS (Visible only when REPEAT = true) */}
-{repeat && (
+          {/* SELECT DAYS (Always visible) */}
   <>
     <Text style={styles.label}>Select Days</Text>
 
@@ -1375,7 +1952,6 @@ const SlotFormModal = ({
       </View>
     )}
   </>
-)}
 
 
         </ScrollView>
@@ -1402,6 +1978,231 @@ const SlotFormModal = ({
           </TouchableOpacity>
         </View>
       </View>
+      </View>
+    </Modal>
+
+    {/* Add Subject Modal */}
+    <Modal
+      visible={addSubjectModalVisible}
+      transparent
+      animationType="fade"
+      onRequestClose={() => setAddSubjectModalVisible(false)}
+    >
+      <View style={styles.addSubjectBackdrop}>
+        <TouchableOpacity
+          style={styles.addSubjectBackdropOverlay}
+          activeOpacity={1}
+          onPress={() => setAddSubjectModalVisible(false)}
+        />
+        <View style={styles.addSubjectCard}>
+          {/* Header */}
+          <View style={styles.addSubjectHeader}>
+            <Text style={styles.addSubjectTitle}>Add Subject</Text>
+            <TouchableOpacity 
+              style={styles.addSubjectCloseButton}
+              onPress={() => {
+                setAddSubjectModalVisible(false);
+                setSelectedSubjectForBatch("");
+                setSubjectModalMode("select");
+                setNewSubjectName("");
+              }}
+            >
+              <Text style={styles.addSubjectClose}>✕</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Course and Batch Info */}
+          <View style={styles.addSubjectMetaContainer}>
+            <View style={styles.addSubjectMetaRow}>
+              <Text style={styles.addSubjectMetaLabel}>Course:</Text>
+              <Text style={styles.addSubjectMetaValue}>{courseName}</Text>
+            </View>
+            <View style={styles.addSubjectMetaRow}>
+              <Text style={styles.addSubjectMetaLabel}>Batch:</Text>
+              <Text style={styles.addSubjectMetaValue}>{batchName}</Text>
+            </View>
+          </View>
+
+          {/* Mode Toggle */}
+          <View style={styles.addSubjectModeToggle}>
+            <TouchableOpacity
+              style={[
+                styles.addSubjectModeButton,
+                subjectModalMode === "select" && styles.addSubjectModeButtonActive,
+              ]}
+              onPress={() => {
+                setSubjectModalMode("select");
+                setNewSubjectName("");
+              }}
+            >
+              <Text style={[
+                styles.addSubjectModeButtonText,
+                subjectModalMode === "select" && styles.addSubjectModeButtonTextActive,
+              ]}>
+                Select Existing
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.addSubjectModeButton,
+                subjectModalMode === "create" && styles.addSubjectModeButtonActive,
+              ]}
+              onPress={() => {
+                setSubjectModalMode("create");
+                setSelectedSubjectForBatch("");
+              }}
+            >
+              <Text style={[
+                styles.addSubjectModeButtonText,
+                subjectModalMode === "create" && styles.addSubjectModeButtonTextActive,
+              ]}>
+                Create New
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {subjectModalMode === "select" ? (
+            <>
+              {/* Select Subjects Label */}
+              <Text style={styles.addSubjectSelectLabel}>Select Subjects</Text>
+
+              {/* Selected Subject Display */}
+              {selectedSubjectForBatch && (
+                <View style={styles.selectedSubjectDisplay}>
+                  <View style={styles.selectedSubjectContent}>
+                    <View style={styles.selectedSubjectCheckbox}>
+                      <Text style={styles.selectedSubjectTick}>✓</Text>
+                    </View>
+                    <Text style={styles.selectedSubjectText}>
+                      {unassignedSubjectOptions.find((s: { value: string; label: string }) => s.value === selectedSubjectForBatch)?.label}
+                    </Text>
+                  </View>
+                </View>
+              )}
+
+              {/* Subject List */}
+              <View style={styles.addSubjectListContainer}>
+                {unassignedSubjectOptions.length > 0 ? (
+                  <ScrollView 
+                    style={styles.addSubjectScrollView} 
+                    nestedScrollEnabled
+                    showsVerticalScrollIndicator={true}
+                  >
+                    {unassignedSubjectOptions.map((subject: { value: string; label: string }) => {
+                      const isSelected = selectedSubjectForBatch === subject.value;
+                      return (
+                        <TouchableOpacity
+                          key={subject.value}
+                          style={[
+                            styles.addSubjectOptionRow,
+                            isSelected && styles.addSubjectOptionRowSelected,
+                          ]}
+                          onPress={() => {
+                            // Toggle selection: if already selected, deselect; otherwise select
+                            if (isSelected) {
+                              setSelectedSubjectForBatch("");
+                            } else {
+                              // Set the subject value to enable submit button
+                              if (subject.value) {
+                                setSelectedSubjectForBatch(subject.value);
+                              }
+                            }
+                          }}
+                          activeOpacity={0.7}
+                        >
+                          <View style={[
+                            styles.addSubjectCheckbox,
+                            isSelected && styles.addSubjectCheckboxActive
+                          ]}>
+                            {isSelected && <Text style={styles.addSubjectCheckboxTick}>✓</Text>}
+                          </View>
+                          <Text style={[
+                            styles.addSubjectOptionLabel,
+                            isSelected && styles.addSubjectOptionLabelSelected
+                          ]}>
+                            {subject.label}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </ScrollView>
+                ) : (
+                  <View style={styles.addSubjectEmptyContainer}>
+                    <Text style={styles.addSubjectEmptyText}>
+                      {courseDetailData?.data?.subjects?.length > 0 
+                        ? "All subjects are already assigned to this batch" 
+                        : "No subjects available"}
+                    </Text>
+                  </View>
+                )}
+              </View>
+            </>
+          ) : (
+            <>
+              {/* Create New Subject */}
+              <Text style={styles.addSubjectSelectLabel}>Create New Subject</Text>
+              <View style={styles.addSubjectInputContainer}>
+                <TextInput
+                  style={styles.addSubjectTextInput}
+                  placeholder="Enter subject name"
+                  placeholderTextColor="#9CA3AF"
+                  value={newSubjectName}
+                  onChangeText={setNewSubjectName}
+                  autoCapitalize="words"
+                  maxLength={100}
+                />
+              </View>
+              
+              {/* <Text style={styles.addSubjectInputHint}>
+                This subject will be added to the course and assigned to this batch
+              </Text> */}
+              
+
+            </>
+          )}
+
+          {/* Footer Buttons */}
+          <View style={styles.addSubjectFooter}>
+            <TouchableOpacity
+              style={styles.addSubjectCancel}
+              onPress={() => {
+                setAddSubjectModalVisible(false);
+                setSelectedSubjectForBatch("");
+                setSubjectModalMode("select");
+                setNewSubjectName("");
+              }}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.addSubjectCancelText}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.addSubjectSubmit,
+                (subjectModalMode === "select" 
+                  ? (!selectedSubjectForBatch || updateBatchMutation.isPending)
+                  : (!newSubjectName?.trim() || updateCourseMutation.isPending || updateBatchMutation.isPending)
+                ) && styles.addSubjectSubmitDisabled,
+              ]}
+              disabled={
+                subjectModalMode === "select"
+                  ? !selectedSubjectForBatch || updateBatchMutation.isPending
+                  : !newSubjectName?.trim() || updateCourseMutation.isPending || updateBatchMutation.isPending
+              }
+              onPress={
+                subjectModalMode === "select"
+                  ? handleAssignSubjectToBatch
+                  : handleCreateAndAssignSubject
+              }
+              activeOpacity={0.8}
+            >
+              <Text style={styles.addSubjectSubmitText}>
+                {(updateCourseMutation.isPending || updateBatchMutation.isPending) 
+                  ? "Submitting..." 
+                  : "Submit"}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
       </View>
     </Modal>
     </>
@@ -1434,19 +2235,21 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     textAlign: "center",
     marginBottom: 16,
+    color: "#000000",
   },
   label: {
     fontSize: 14,
     fontWeight: "600",
     marginTop: 12,
     marginBottom: 4,
+    color: "#000000",
   },
   dropdownBox: {
     flex: 1,
     
     height: 45,             
     borderWidth: 1,
-    borderColor: "#C9D4F1",
+    borderColor: "#9CA3AF",
     borderRadius: 10,
     overflow: "hidden",
     justifyContent: "center"
@@ -1479,6 +2282,7 @@ const styles = StyleSheet.create({
   repeatLabel: {
     fontSize: 14,
     fontWeight: "600",
+    color: "#000000", 
   },
   daysRow: {
     flexDirection: "row",
@@ -1548,82 +2352,185 @@ const styles = StyleSheet.create({
   },
   addSubjectBackdrop: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.45)",
     justifyContent: "center",
     alignItems: "center",
-    padding: 16,
+    padding: 20,
+  },
+  addSubjectBackdropOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(0,0,0,0.5)",
   },
   addSubjectCard: {
-    width: "100%",
-    maxWidth: 420,
+    width: "95%",
+    maxWidth: 450,
+    maxHeight: "180%",
     backgroundColor: "#FFF",
-    borderRadius: 16,
-    padding: 20,
+    borderRadius: 20,
+    padding: 24,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    elevation: 8,
   },
   addSubjectHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 16,
+    marginBottom: 20,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: "#E5E7EB",
   },
   addSubjectTitle: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: "700",
     color: "#111827",
+    letterSpacing: 0.3,
+  },
+  addSubjectCloseButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "#F3F4F6",
+    alignItems: "center",
+    justifyContent: "center",
   },
   addSubjectClose: {
     fontSize: 18,
     color: "#6B7280",
-  },
-  addSubjectMeta: {
-    fontSize: 14,
-    color: "#4B5563",
-    marginBottom: 4,
-  },
-  addSubjectMetaLabel: {
     fontWeight: "600",
-    color: "#111827",
   },
-  selectDropdownBox: {
+  addSubjectMetaContainer: {
+    backgroundColor: "#F9FAFB",
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 20,
     borderWidth: 1,
-    borderColor: "#C9D4F1",
-    borderRadius: 10,
-    overflow: "hidden",
-    marginTop: 16,
+    borderColor: "#E5E7EB",
   },
-  subjectList: {
-    maxHeight: 220,
-    marginTop: 12,
-  },
-  subjectOptionRow: {
+  addSubjectMetaRow: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: "#F3F4F6",
+    marginBottom: 8,
   },
-  subjectCheckbox: {
-    width: 20,
-    height: 20,
-    borderRadius: 4,
+  addSubjectMetaLabel: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#374151",
+    marginRight: 8,
+    minWidth: 60,
+  },
+  addSubjectMetaValue: {
+    fontSize: 14,
+    color: "#111827",
+    fontWeight: "500",
+    flex: 1,
+  },
+  addSubjectSelectLabel: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#111827",
+    marginBottom: 12,
+  },
+  selectedSubjectDisplay: {
+    backgroundColor: "#EEF2FF",
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 16,
     borderWidth: 1,
-    borderColor: "#D1D5DB",
+    borderColor: COLORS.primary,
+  },
+  selectedSubjectContent: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  selectedSubjectCheckbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 5,
+    backgroundColor: COLORS.primary,
     alignItems: "center",
     justifyContent: "center",
     marginRight: 12,
   },
-  subjectCheckboxActive: {
-    borderColor: COLORS.primary,
-    backgroundColor: "rgba(107,87,242,0.15)",
-  },
-  subjectCheckboxTick: {
-    color: COLORS.primary,
-    fontSize: 12,
+  selectedSubjectTick: {
+    color: "#FFF",
+    fontSize: 14,
     fontWeight: "700",
   },
-  subjectOptionLabel: {
-    color: "#111827",
+  selectedSubjectText: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: COLORS.primary,
+    flex: 1,
+  },
+  addSubjectListContainer: {
+    maxHeight: 280,
+    marginBottom: 20,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    backgroundColor: "#FAFAFA",
+  },
+  addSubjectScrollView: {
+    maxHeight: 280,
+  },
+  addSubjectOptionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F3F4F6",
+  },
+  addSubjectOptionRowSelected: {
+    backgroundColor: "#EEF2FF",
+  },
+  addSubjectCheckbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 5,
+    borderWidth: 2,
+    borderColor: "#D1D5DB",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 12,
+    backgroundColor: "#FFF",
+  },
+  addSubjectCheckboxActive: {
+    borderColor: COLORS.primary,
+    backgroundColor: COLORS.primary,
+  },
+  addSubjectCheckboxTick: {
+    color: "#FFF",
     fontSize: 14,
+    fontWeight: "700",
+  },
+  addSubjectOptionLabel: {
+    color: "#374151",
+    fontSize: 15,
+    fontWeight: "500",
+    flex: 1,
+  },
+  addSubjectOptionLabelSelected: {
+    color: COLORS.primary,
+    fontWeight: "600",
+  },
+  addSubjectEmptyContainer: {
+    padding: 32,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  addSubjectEmptyText: {
+    fontSize: 14,
+    color: "#6B7280",
+    textAlign: "center",
+    lineHeight: 20,
   },
   createLinkRow: {
     flexDirection: "row",
@@ -1644,16 +2551,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 12,
     marginTop: 16,
-  },
-  addSubjectTextInput: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: "#D1D5DB",
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    fontSize: 15,
-    color: "#111827",
   },
   addSubjectAddBtn: {
     paddingHorizontal: 16,
@@ -1714,31 +2611,101 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "flex-end",
     gap: 12,
-    marginTop: 12,
+    marginTop: 8,
+    paddingTop: 20,
+    borderTopWidth: 1,
+    borderTopColor: "#E5E7EB",
   },
   addSubjectCancel: {
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 8,
-    borderWidth: 1,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 10,
+    borderWidth: 1.5,
     borderColor: "#D1D5DB",
+    backgroundColor: "#FFF",
+    minWidth: 100,
+    alignItems: "center",
   },
   addSubjectCancelText: {
-    color: "#6B7280",
+    color: "#374151",
     fontWeight: "600",
+    fontSize: 15,
   },
   addSubjectSubmit: {
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 8,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 10,
     backgroundColor: COLORS.primary,
+    minWidth: 100,
+    alignItems: "center",
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
   },
   addSubjectSubmitDisabled: {
     backgroundColor: "#CBD5F5",
+    shadowOpacity: 0,
+    elevation: 0,
   },
   addSubjectSubmitText: {
     color: "#FFF",
     fontWeight: "700",
+    fontSize: 15,
+  },
+  addSubjectModeToggle: {
+    flexDirection: "row",
+    backgroundColor: "#F3F4F6",
+    borderRadius: 10,
+    padding: 4,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+  },
+  addSubjectModeButton: {
+    flex: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  addSubjectModeButtonActive: {
+    backgroundColor: "#FFF",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  addSubjectModeButtonText: {
+    fontSize: 14,
+    fontWeight: "500",
+    color: "#6B7280",
+  },
+  addSubjectModeButtonTextActive: {
+    color: COLORS.primary,
+    fontWeight: "600",
+  },
+  addSubjectInputContainer: {
+    marginBottom: 12,
+  },
+  addSubjectTextInput: {
+    borderWidth: 1.5,
+    borderColor: "#D1D5DB",
+    borderRadius: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    fontSize: 15,
+    color: "#111827",
+    backgroundColor: "#FFF",
+  },
+  addSubjectInputHint: {
+    fontSize: 12,
+    color: "#6B7280",
+    marginBottom: 8,
+    lineHeight: 16,
   },
   // Cascading dropdown styles
   dropdownContent: {
@@ -1754,10 +2721,10 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   dropdownPlaceholder: {
-    color: "#9CA3AF",
+    color: "#6B7280",
   },
   dropdownArrow: {
-    color: "#9CA3AF",
+    color: "#6B7280",
     fontSize: 12,
     marginLeft: 8,
   },
@@ -1768,7 +2735,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFF",
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: "#C9D4F1",
+    borderColor: "#9CA3AF",
     marginTop: 8,
     marginBottom: 8,
     maxHeight: 250,
@@ -1814,3 +2781,7 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
 });
+
+
+
+

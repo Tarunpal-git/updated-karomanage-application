@@ -10,6 +10,7 @@ import { useStudentAdmissionMutation } from '../../../apis/hooks/students/mutati
 import SafeView from '../../../@ui/safe-view/SafeView';
 import AppHeader from '../../../@ui/app-header/AppHeader';
 import { COLORS } from '../../../colors';
+import RNPrint from 'react-native-print';
 
 const ReviewScreen = () => {
   const navigation = useNavigation<any>();
@@ -84,6 +85,38 @@ const ReviewScreen = () => {
         return `${day}-${month}-${year}`;
       };
 
+      // Helper function to generate unique ID (similar to UUID.slice(0, 8))
+      // Web uses: uuidv4().slice(0, 8) - generates 8 character hex string (0-9, a-f)
+      // Example: "a669db6f" - mix of letters and numbers
+      const generateUniqueId = () => {
+        // Generate 8-character hex string (similar to UUID format: 0-9, a-f)
+        // This ensures we get both letters and numbers like web version
+        let result = '';
+        const hexChars = '0123456789abcdef'; // Hexadecimal characters
+        
+        // Generate 8 random hex characters
+        for (let i = 0; i < 8; i++) {
+          result += hexChars[Math.floor(Math.random() * 16)];
+        }
+        
+        return result;
+      };
+
+      // Generate rollNo like web: {organizationPrefix}-{8charRandomId}
+      // Example: "RO-a669db6f" where "RO-" is org prefix and "a669db6f" is random ID
+      const organizationId = selectedOrganization?.organizationId || '';
+      const orgPrefix = organizationId ? organizationId.split('-')[0] + '-' : '';
+      const randomId = generateUniqueId();
+      const generatedRollNo = orgPrefix + randomId;
+
+      console.log('🎲 Generated Roll Number:', {
+        organizationId,
+        orgPrefix,
+        randomId,
+        generatedRollNo,
+        enrollmentNumber: data.studentEnrollmentNumber
+      });
+
       // Map context data to API payload based on web implementation
       const payload = {
         user: {
@@ -95,14 +128,14 @@ const ReviewScreen = () => {
           userEmployeeId: 'TOP-9d8a8',
         },
         customerId: selectedOrganization?.customerId || '',
-        rollNo: data.studentEnrollmentNumber || '',
+        rollNo: generatedRollNo, // ✅ Web जैसा unique generated rollNo
         organizationId: selectedOrganization?.organizationId || '',
         studentFirstName: data.studentFirstName || '',
         studentLastName: data.studentLastName || '',
         studentEmail: data.studentEmail || '',
         studentDateOfBirth: data.studentDateOfBirth ? formatDateForAPI(data.studentDateOfBirth) : null,
         dateOfAdmission: data.dateOfAdmission ? formatDateForAPI(data.dateOfAdmission) : null,
-        studentImage: '',
+        studentImage: data.studentImage || '',
         referralpaymentStatus: (data as any).referralpaymentStatus || 'paid',
         referralAmount: data.referralAmount || 0,
         referedBy: data.referedBy || '',
@@ -267,6 +300,38 @@ const ReviewScreen = () => {
         installments: (data as any).installments
       });
       
+      // 📤 COMPLETE STUDENT ADMISSION PAYLOAD - API को जाने वाला पूरा payload
+      console.log('📤 ============================================');
+      console.log('📤 STUDENT ADMISSION API PAYLOAD (COMPLETE)');
+      console.log('📤 ============================================');
+      console.log('📤 Full Payload (JSON):', JSON.stringify(payload, null, 2));
+      console.log('📤 Full Payload (Object):', payload);
+      console.log('📤 Payload Keys:', Object.keys(payload));
+      console.log('📤 ============================================');
+      console.log('📤 Payload Breakdown:');
+      console.log('📤   - User Info:', payload.user);
+      console.log('📤   - Customer ID:', payload.customerId);
+      console.log('📤   - Organization ID:', payload.organizationId);
+      console.log('📤   - Roll No:', payload.rollNo);
+      console.log('📤   - Student Name:', `${payload.studentFirstName} ${payload.studentLastName}`);
+      console.log('📤   - Student Email:', payload.studentEmail);
+      console.log('📤   - Student Enrollment Number:', payload.studentEnrollmentNumber);
+      console.log('📤   - Course:', payload.basicOrgAndCourseDetail?.courseName);
+      console.log('📤   - Batch:', payload.batch?.[0]?.batchId);
+      console.log('📤   - Payment Details:', {
+        isPartPayment: payload.paymentDetails?.isPartPayment,
+        totalPayment: payload.paymentDetails?.totalPayment,
+        discountedPaymentAmount: payload.paymentDetails?.discountedPaymentAmount,
+        totalReceivedPayment: payload.paymentDetails?.totalReceivedPayment,
+        allPaymentStatus: payload.paymentDetails?.allPaymentStatus,
+        cgstPercentage: payload.paymentDetails?.cgstPercentage,
+        sgstPercentage: payload.paymentDetails?.sgstPercentage,
+        inclusionType: payload.paymentDetails?.inclusionType,
+        installmentCount: payload.paymentDetails?.installmentDetails?.length || 0
+      });
+      console.log('📤   - Installments:', payload.paymentDetails?.installmentDetails || 'N/A');
+      console.log('📤 ============================================');
+      
       const response = await mutateAsync(payload as any);
       
       console.log('🎓 Student admission response:', response);
@@ -301,9 +366,442 @@ const ReviewScreen = () => {
     navigation.goBack();
   };
 
-  const onPrint = () => {
-    // Handle print functionality
-    console.log('Print functionality');
+  const onPrint = async () => {
+    try {
+      // Format date helper
+      const formatDateForPrint = (dateValue: any) => {
+        if (!dateValue || dateValue === "" || dateValue === null || dateValue === undefined) {
+          return "";
+        }
+        try {
+          let date: Date;
+          if (dateValue instanceof Date) {
+            date = dateValue;
+          } else if (typeof dateValue === 'string') {
+            date = new Date(dateValue);
+            if (isNaN(date.getTime())) {
+              return String(dateValue);
+            }
+          } else {
+            return String(dateValue);
+          }
+          const day = String(date.getDate()).padStart(2, '0');
+          const month = String(date.getMonth() + 1).padStart(2, '0');
+          const year = date.getFullYear();
+          return `${day}/${month}/${year}`;
+        } catch (error) {
+          return String(dateValue);
+        }
+      };
+
+      // Helper function to get field value
+      const getFieldValue = (value: any) => {
+        if (value === null || value === undefined || value === '') {
+          return '-';
+        }
+        return String(value);
+      };
+
+      // Current date and time
+      const currentDate = new Date();
+      const formattedDate = currentDate.toLocaleDateString('en-GB', { 
+        day: '2-digit', 
+        month: '2-digit', 
+        year: 'numeric' 
+      });
+      const formattedTime = currentDate.toLocaleTimeString('en-GB', { 
+        hour: '2-digit', 
+        minute: '2-digit' 
+      });
+
+      // Format custom fields
+      const formatCustomFields = () => {
+        if (!data.dynamicFields || data.dynamicFields.length === 0) {
+          return '';
+        }
+        const fieldsWithValues = data.dynamicFields.filter((field: any) => {
+          if (field.type === 'Media') {
+            return field.mediaUri || (field.value && field.value.trim() !== '');
+          } else {
+            return field.value && field.value.trim() !== '';
+          }
+        });
+        
+        if (fieldsWithValues.length === 0) return '';
+        
+        return fieldsWithValues.map((field: any) => {
+          const fieldValue = field.type === 'Media' 
+            ? (field.mediaUri ? 'File Selected' : getFieldValue(field.value))
+            : getFieldValue(field.value);
+          return `
+            <div class="row">
+              <span class="label">${field.fieldName}:</span>
+              <span class="value">${fieldValue}</span>
+            </div>`;
+        }).join('');
+      };
+
+      // Format installment details
+      const formatInstallments = () => {
+        if (numberOfInstallments === 1) {
+          const paymentStatus = (data as any).paymentStatus === 'paid' ? 'Paid' : 'Due';
+          const paymentAmount = (() => {
+            if (gstRuleData && gstRuleData.inclusionType === 'excluded') {
+              const baseAmount = (data as any).paymentAfterDiscount || totalPayment;
+              return `₹ ${baseAmount.toLocaleString('en-IN')}.00`;
+            } else {
+              return finalAmount ? `₹ ${finalAmount.toLocaleString('en-IN')}.00` : '-';
+            }
+          })();
+          
+          return `
+            <div class="row">
+              <span class="label">Date:</span>
+              <span class="value">${formatDateForPrint((data as any).paymentDate)}</span>
+            </div>
+            <div class="row">
+              <span class="label">Amount:</span>
+              <span class="value">${paymentAmount}</span>
+            </div>
+            <div class="row">
+              <span class="label">Payment Status:</span>
+              <span class="value">${paymentStatus}</span>
+            </div>
+            ${(data as any).paymentStatus === 'paid' ? `
+            <div class="row">
+              <span class="label">Payment Mode:</span>
+              <span class="value">${(data as any).paymentMode ? ((data as any).paymentMode === 'cash' ? 'Cash' : (data as any).paymentMode === 'online' ? 'Online' : (data as any).paymentMode) : '-'}</span>
+            </div>
+            ` : ''}
+            <div class="row">
+              <span class="label">Description:</span>
+              <span class="value">${getFieldValue((data as any).description)}</span>
+            </div>`;
+        }
+        
+        if ((data as any).installments && (data as any).installments.length > 0) {
+          return (data as any).installments.map((installment: any, index: number) => {
+            const installmentAmount = (() => {
+              if (gstRuleData && gstRuleData.inclusionType === 'excluded') {
+                const baseAmount = (data as any).paymentAfterDiscount || totalPayment;
+                return `₹ ${baseAmount.toLocaleString('en-IN')}.00`;
+              } else {
+                return installment.amount ? `₹ ${installment.amount.toLocaleString('en-IN')}.00` : '-';
+              }
+            })();
+            
+            return `
+              <div class="installment-section">
+                <div class="installment-title">Installment ${index + 1}</div>
+                <div class="row">
+                  <span class="label">Date:</span>
+                  <span class="value">${formatDateForPrint(installment.date)}</span>
+                </div>
+                <div class="row">
+                  <span class="label">Amount:</span>
+                  <span class="value">${installmentAmount}</span>
+                </div>
+                <div class="row">
+                  <span class="label">Payment Status:</span>
+                  <span class="value">${installment.status || (index === 0 ? 'Due' : 'Pending')}</span>
+                </div>
+                ${installment.status === 'paid' ? `
+                <div class="row">
+                  <span class="label">Payment Mode:</span>
+                  <span class="value">${installment.paymentMode ? (installment.paymentMode === 'cash' ? 'Cash' : installment.paymentMode === 'online' ? 'Online' : installment.paymentMode) : '-'}</span>
+                </div>
+                ` : ''}
+                <div class="row">
+                  <span class="label">Description:</span>
+                  <span class="value">${getFieldValue(installment.description)}</span>
+                </div>
+              </div>`;
+          }).join('');
+        }
+        
+        return '';
+      };
+
+      // HTML content for print
+      const htmlContent = `
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <meta charset="UTF-8">
+            <title>Student Review Page</title>
+            <style>
+              @media print {
+                body { margin: 0; }
+                .no-print { display: none; }
+              }
+              body {
+                font-family: Arial, sans-serif;
+                padding: 20px;
+                color: #000;
+              }
+              .header {
+                text-align: center;
+                margin-bottom: 30px;
+                border-bottom: 2px solid #000;
+                padding-bottom: 15px;
+              }
+              .header h1 {
+                margin: 0;
+                font-size: 24px;
+                font-weight: bold;
+              }
+              .header p {
+                margin: 5px 0;
+                font-size: 14px;
+              }
+              .section {
+                margin-bottom: 25px;
+                page-break-inside: avoid;
+              }
+              .section-title {
+                font-weight: bold;
+                font-size: 18px;
+                margin-bottom: 15px;
+                border-bottom: 1px solid #ccc;
+                padding-bottom: 5px;
+              }
+              .row {
+                display: flex;
+                margin-bottom: 8px;
+                font-size: 14px;
+              }
+              .label {
+                font-weight: bold;
+                width: 220px;
+                min-width: 220px;
+              }
+              .value {
+                flex: 1;
+                word-wrap: break-word;
+              }
+              .installment-section {
+                margin-bottom: 15px;
+                padding-left: 20px;
+                border-left: 2px solid #ccc;
+              }
+              .installment-title {
+                font-weight: bold;
+                font-size: 16px;
+                margin-bottom: 10px;
+                color: #333;
+              }
+              .footer {
+                margin-top: 40px;
+                text-align: center;
+                font-size: 12px;
+                color: #666;
+                border-top: 1px solid #ccc;
+                padding-top: 15px;
+              }
+              .url {
+                margin-top: 10px;
+                font-size: 11px;
+                color: #999;
+              }
+            </style>
+          </head>
+          <body>
+            <div class="header">
+              <h1>Student Review Page</h1>
+              <p>Karomanage</p>
+              <p>${formattedDate}, ${formattedTime}</p>
+            </div>
+            
+            <div class="section">
+              <div class="section-title">Student Personal Details</div>
+              <div class="row">
+                <span class="label">Full Name:</span>
+                <span class="value">${getFieldValue(`${data.studentFirstName || ''} ${data.studentLastName || ''}`.trim())}</span>
+              </div>
+              <div class="row">
+                <span class="label">Enrollment Number:</span>
+                <span class="value">${getFieldValue(data.studentEnrollmentNumber)}</span>
+              </div>
+              <div class="row">
+                <span class="label">Email:</span>
+                <span class="value">${getFieldValue(data.studentEmail)}</span>
+              </div>
+              <div class="row">
+                <span class="label">Mobile Number:</span>
+                <span class="value">${getFieldValue(data.studentContact)}</span>
+              </div>
+              <div class="row">
+                <span class="label">Date of Birth:</span>
+                <span class="value">${formatDateForPrint(data.studentDateOfBirth)}</span>
+              </div>
+              <div class="row">
+                <span class="label">Date of Admission:</span>
+                <span class="value">${formatDateForPrint(data.dateOfAdmission)}</span>
+              </div>
+              <div class="row">
+                <span class="label">Father's Name:</span>
+                <span class="value">${getFieldValue(data.studentFatherName)}</span>
+              </div>
+              <div class="row">
+                <span class="label">Father's Number:</span>
+                <span class="value">${getFieldValue(data.studentFatherContact)}</span>
+              </div>
+              <div class="row">
+                <span class="label">Address:</span>
+                <span class="value">${getFieldValue(data.studentAddress)}</span>
+              </div>
+              <div class="row">
+                <span class="label">Gender:</span>
+                <span class="value">${getFieldValue(data.studentGender)}</span>
+              </div>
+              <div class="row">
+                <span class="label">Referred By:</span>
+                <span class="value">${getFieldValue(data.referedBy)}</span>
+              </div>
+            </div>
+            
+            ${data.dynamicFields && data.dynamicFields.length > 0 && data.dynamicFields.filter((field: any) => {
+              if (field.type === 'Media') {
+                return field.mediaUri || (field.value && field.value.trim() !== '');
+              } else {
+                return field.value && field.value.trim() !== '';
+              }
+            }).length > 0 ? `
+            <div class="section">
+              <div class="section-title">Custom Fields</div>
+              ${formatCustomFields()}
+            </div>
+            ` : ''}
+            
+            ${(data.state || data.city || data.collegeName || data.collegeCourse || data.collegeSemester || data.departmentName) ? `
+            <div class="section">
+              <div class="section-title">College Details</div>
+              <div class="row">
+                <span class="label">State:</span>
+                <span class="value">${getFieldValue(data.state)}</span>
+              </div>
+              <div class="row">
+                <span class="label">City:</span>
+                <span class="value">${getFieldValue(data.city)}</span>
+              </div>
+              <div class="row">
+                <span class="label">College Name:</span>
+                <span class="value">${getFieldValue(data.collegeName)}</span>
+              </div>
+              <div class="row">
+                <span class="label">College Course:</span>
+                <span class="value">${getFieldValue(data.collegeCourse)}</span>
+              </div>
+              <div class="row">
+                <span class="label">College Semester:</span>
+                <span class="value">${getFieldValue(data.collegeSemester)}</span>
+              </div>
+              <div class="row">
+                <span class="label">Department Name:</span>
+                <span class="value">${getFieldValue(data.departmentName)}</span>
+              </div>
+            </div>
+            ` : ''}
+            
+            <div class="section">
+              <div class="section-title">Course & Batch Details</div>
+              <div class="row">
+                <span class="label">Course Name:</span>
+                <span class="value">${getFieldValue(data.course)}</span>
+              </div>
+              <div class="row">
+                <span class="label">Course Fee:</span>
+                <span class="value">${data.courseFee ? `₹ ${data.courseFee.toLocaleString('en-IN')}.00` : '-'}</span>
+              </div>
+              <div class="row">
+                <span class="label">Batch Name:</span>
+                <span class="value">${getFieldValue(data.batch)}</span>
+              </div>
+            </div>
+            
+            <div class="section">
+              <div class="section-title">Payment Details</div>
+              <div class="row">
+                <span class="label">Part Payment:</span>
+                <span class="value">${data.partPayment === 'yes' ? 'Yes' : 'No'}</span>
+              </div>
+              ${(() => {
+                // Check if coupon is applied
+                const hasCoupon = data.coupon && data.coupon !== '' && (
+                  (typeof data.coupon === 'object' && (data.coupon.couponName || data.coupon.label || data.coupon.couponId)) ||
+                  (typeof data.coupon === 'string' && data.coupon.trim() !== '')
+                );
+                
+                if (hasCoupon) {
+                  return `
+              <div class="row">
+                <span class="label">Coupon Name:</span>
+                <span class="value">${(() => {
+                  if (typeof data.coupon === 'object' && data.coupon.couponName) return data.coupon.couponName;
+                  if (typeof data.coupon === 'object' && data.coupon.label) return data.coupon.label;
+                  if (typeof data.coupon === 'string') return data.coupon;
+                  return '-';
+                })()}</span>
+              </div>
+              <div class="row">
+                <span class="label">Discount Offered:</span>
+                <span class="value">${discountAmount ? `₹ ${discountAmount.toLocaleString('en-IN')}.00` : '-'}</span>
+              </div>`;
+                }
+                return '';
+              })()}
+              <div class="row">
+                <span class="label">Course Fee:</span>
+                <span class="value">${totalPayment ? `₹ ${totalPayment.toLocaleString('en-IN')}.00` : '-'}</span>
+              </div>
+              <div class="row">
+                <span class="label">Total:</span>
+                <span class="value">${(data as any).paymentAfterDiscount ? `₹ ${(data as any).paymentAfterDiscount.toLocaleString('en-IN')}.00` : (totalPayment ? `₹ ${totalPayment.toLocaleString('en-IN')}.00` : '-')}</span>
+              </div>
+              ${gstRuleData && gstRuleData.inclusionType === 'excluded' && gstRuleData.cgstEnabled ? `
+              <div class="row">
+                <span class="label">CGST:</span>
+                <span class="value">₹ ${((data as any).cgstAmount || 0).toLocaleString('en-IN')}.00 (${gstRuleData.cgstPercentage}%)</span>
+              </div>
+              ` : ''}
+              ${gstRuleData && gstRuleData.inclusionType === 'excluded' && gstRuleData.sgstEnabled ? `
+              <div class="row">
+                <span class="label">SGST:</span>
+                <span class="value">₹ ${((data as any).sgstAmount || 0).toLocaleString('en-IN')}.00 (${gstRuleData.sgstPercentage}%)</span>
+              </div>
+              ` : ''}
+              ${gstRuleData && gstRuleData.inclusionType === 'excluded' ? `
+              <div class="row">
+                <span class="label">Grand Total:</span>
+                <span class="value">${(data as any).paymentAfterGST ? `₹ ${(data as any).paymentAfterGST.toLocaleString('en-IN')}.00` : '-'}</span>
+              </div>
+              ` : ''}
+            </div>
+            
+            ${numberOfInstallments > 1 || numberOfInstallments === 1 ? `
+            <div class="section">
+              <div class="section-title">Installment Details</div>
+              ${formatInstallments()}
+            </div>
+            ` : ''}
+            
+            <div class="footer">
+              <div class="url">https://portal.karomanage.com/student/studentRegistration/</div>
+              <p>© ${currentDate.getFullYear()} Karomanage Powered by Bytomanage Innovation Private Limited</p>
+            </div>
+          </body>
+        </html>
+      `;
+
+      // Print dialog open karo
+      await RNPrint.print({
+        html: htmlContent
+      });
+      
+    } catch (error) {
+      console.error('Print error:', error);
+      Alert.alert('Error', 'Failed to print. Please try again.');
+    }
   };
 
   // Calculate payment details
@@ -333,7 +831,7 @@ const ReviewScreen = () => {
   const renderSection = (title: string, data: any, icon?: string) => (
     <View style={styles.section}>
       <View style={styles.sectionHeader}>
-        {icon && <ScalableText style={styles.sectionIcon}>{icon}</ScalableText>}
+        {icon && <ScalableText style={styles.sectionIcon} fontFamily="Medium">{icon}</ScalableText>}
         <ScalableText style={styles.sectionTitle} fontFamily="Medium">{title}</ScalableText>
       </View>
       <View style={styles.sectionContent}>
@@ -354,27 +852,27 @@ const ReviewScreen = () => {
     </View>
   );
 
-  return (
-    <SafeView>
-      <AppHeader
+        return (
+        <SafeView>
+        <AppHeader
         title="Student Review Page"
         showDrawer={false}
         handleBackClick={goBackWithConfirmation}
-      />
-      <View style={styles.screenRoot}>
-        <View style={styles.mainContainer}>
+        />
+          <View style={styles.screenRoot}>
+          <View style={styles.mainContainer}>
           {/* Review Details - Full Width */}
           <View style={styles.fullWidthPanel}>
-            <ScrollView 
+              <ScrollView 
               style={styles.scrollView}
               showsVerticalScrollIndicator={false}
               contentContainerStyle={styles.scrollContent}
-            >
+              >
               <View style={styles.reviewHeader}>
         
-                <ScalableText style={styles.stepIndicator} fontFamily="Regular">
-                  Check Your Filled Details
-                </ScalableText>
+                {/* <ScalableText style={styles.stepIndicator} fontFamily="Regular">
+                  Check Your Filled Detail
+                </ScalableText> */}
               </View>
               
               {/* Student Personal Details Section */}
@@ -389,7 +887,7 @@ const ReviewScreen = () => {
                 'Father\'s Number': data.studentFatherContact || '-',
                 'Address': data.studentAddress || '-',
                 'Gender': data.studentGender || '-',
-                'Referred By': data.referedBy || '-',
+                // 'Referred By': data.referedBy || '-',
               }, '👤')}
 
               {/* Custom Fields Section */}
@@ -436,21 +934,32 @@ const ReviewScreen = () => {
                 'Course Name': data.course,
                 'Course Fee': data.courseFee ? `₹ ${data.courseFee.toLocaleString('en-IN')}.00` : '-',
                 'Batch Name': data.batch,
-                'Batch Mode': data.batchMode,
               }, '📚')}
 
               {/* Payment Details Section */}
               {renderSection('Payment Details', {
                 'Part Payment': data.partPayment === 'yes' ? 'Yes' : 'No',
-                'Coupon Name': (() => {
-                  if (!data.coupon || data.coupon === '') return '-';
-                  if (typeof data.coupon === 'object' && data.coupon.couponName) return data.coupon.couponName;
-                  if (typeof data.coupon === 'object' && data.coupon.label) return data.coupon.label;
-                  if (typeof data.coupon === 'string') return data.coupon;
-                  return '-';
-                })(),
+                ...((() => {
+                  // Check if coupon is applied
+                  const hasCoupon = data.coupon && data.coupon !== '' && (
+                    (typeof data.coupon === 'object' && (data.coupon.couponName || data.coupon.label || data.coupon.couponId)) ||
+                    (typeof data.coupon === 'string' && data.coupon.trim() !== '')
+                  );
+                  
+                  if (hasCoupon) {
+                    return {
+                      'Coupon Name': (() => {
+                        if (typeof data.coupon === 'object' && data.coupon.couponName) return data.coupon.couponName;
+                        if (typeof data.coupon === 'object' && data.coupon.label) return data.coupon.label;
+                        if (typeof data.coupon === 'string') return data.coupon;
+                        return '-';
+                      })(),
+                      'Discount Offered': discountAmount ? `₹ ${discountAmount.toLocaleString('en-IN')}.00` : '-',
+                    };
+                  }
+                  return {};
+                })()),
                 'Course Fee': totalPayment ? `₹ ${totalPayment.toLocaleString('en-IN')}.00` : '-',
-                'Discount Offered': discountAmount ? `₹ ${discountAmount.toLocaleString('en-IN')}.00` : '-',
                 'Total': (data as any).paymentAfterDiscount ? `₹ ${(data as any).paymentAfterDiscount.toLocaleString('en-IN')}.00` : (totalPayment ? `₹ ${totalPayment.toLocaleString('en-IN')}.00` : '-'),
                 ...(gstRuleData && gstRuleData.inclusionType === 'excluded' && gstRuleData.cgstEnabled && {
                   'CGST': `₹ ${(data as any).cgstAmount?.toLocaleString('en-IN') || '0'}.00 (${gstRuleData.cgstPercentage}%)`
@@ -476,6 +985,9 @@ const ReviewScreen = () => {
                     }
                   })(),
                   'Payment Status': installment.status || (index === 0 ? 'Due' : 'Pending'),
+                  ...(installment.status === 'paid' && {
+                    'Payment Mode': installment.paymentMode ? (installment.paymentMode === 'cash' ? 'Cash' : installment.paymentMode === 'online' ? 'Online' : installment.paymentMode) : '-',
+                  }),
                   ...(gstRuleData && gstRuleData.inclusionType !== 'noGST' && installment.status === 'paid' && gstRuleData.inclusionType === 'included' && {
                     'Tuition Fee': (() => {
                       const installmentAmount = parseInt(installment.amount) || 0;
@@ -536,6 +1048,9 @@ const ReviewScreen = () => {
                     }
                   })(),
                   'Payment Status': (data as any).paymentStatus === 'paid' ? 'Paid' : 'Due',
+                  ...((data as any).paymentStatus === 'paid' && {
+                    'Payment Mode': (data as any).paymentMode ? ((data as any).paymentMode === 'cash' ? 'Cash' : (data as any).paymentMode === 'online' ? 'Online' : (data as any).paymentMode) : '-',
+                  }),
                   ...(gstRuleData && gstRuleData.inclusionType !== 'noGST' && (data as any).paymentStatus === 'paid' && gstRuleData.inclusionType === 'included' && {
                     'Tuition Fee': (() => {
                       const cgstAmount = gstRuleData.cgstEnabled ? Math.round((finalAmount * gstRuleData.cgstPercentage) / 100) : 0;

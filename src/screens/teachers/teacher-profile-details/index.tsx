@@ -33,6 +33,37 @@ const TeacherProfileDetails = () => {
     }
   }, [isLoading, data]);
 
+  // Capitalize first letter of last name
+  const capitalizeLastName = (lastName: string | undefined): string => {
+    if (!lastName || lastName.trim() === "") return "";
+    const trimmed = lastName.trim();
+    return trimmed.charAt(0).toUpperCase() + trimmed.slice(1).toLowerCase();
+  };
+
+  // Extract and format first name and last name
+  const { formattedFirstName, formattedLastName } = useMemo(() => {
+    const firstName = teacherDetails?.teacherFirstName || "";
+    const lastName = teacherDetails?.teacherLastName || "";
+    
+    // If lastName is empty, try to extract from firstName (e.g., "Radhika bisth")
+    if (!lastName && firstName.includes(" ")) {
+      const parts = firstName.trim().split(" ");
+      const extractedFirstName = parts[0] || "";
+      const extractedLastName = parts.slice(1).join(" ") || "";
+      
+      return {
+        formattedFirstName: extractedFirstName,
+        formattedLastName: capitalizeLastName(extractedLastName),
+      };
+    }
+    
+    // If lastName exists, use it directly
+    return {
+      formattedFirstName: firstName,
+      formattedLastName: capitalizeLastName(lastName),
+    };
+  }, [teacherDetails?.teacherFirstName, teacherDetails?.teacherLastName]);
+
   if (isLoading && !teacherDetails) {
     return <Center loading />;
   }
@@ -51,11 +82,10 @@ const TeacherProfileDetails = () => {
           <Avatar
             size={77}
             textStyle={{ fontSize: 35 }}
-            content={`${teacherDetails?.teacherFirstName} ${teacherDetails?.teacherLastName}`}
+            content={`${formattedFirstName} ${formattedLastName}`.trim()}
           />
           <ScalableText style={styles.userNameText} fontFamily="SemiBold">
-            {teacherDetails?.teacherFirstName ?? " "}{" "}
-            {teacherDetails?.teacherLastName ?? ""}
+            {formattedFirstName} {formattedLastName}
           </ScalableText>
         </Flex>
 
@@ -88,9 +118,7 @@ const TeacherProfileDetails = () => {
                     style={styles.sectionContentDataText}
                     fontFamily="Medium"
                   >
-                    {`${teacherDetails?.teacherFirstName} ${
-                      teacherDetails?.teacherLastName ?? ""
-                    }`}
+                    {`${formattedFirstName} ${formattedLastName}`.trim()}
                   </ScalableText>
                 </Col>
               </Row>

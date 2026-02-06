@@ -90,7 +90,7 @@ const EditFollowUpModal: FC<IEditFollowUpModal> = ({
           <Flex my={15}>
             <DateInput
               handler={handler}
-              label="Follow up date*"
+              label="Follow upate*"
               name="followUpDate"
             />
           </Flex>

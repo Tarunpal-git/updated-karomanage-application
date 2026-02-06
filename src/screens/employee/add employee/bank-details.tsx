@@ -1,50 +1,48 @@
- 
 
 import React from "react";
 import { useState, useEffect } from "react";
 import axios from "axios";
-import { StyleSheet, View, Dimensions, Text } from "react-native";
+import { StyleSheet, View, Dimensions, Text, TextInput } from "react-native";
 import { useForm, Controller } from "react-hook-form";
 import SafeView from "../../../@ui/safe-view/SafeView";
 import AppHeader from "../../../@ui/app-header/AppHeader";
 import ThemeScrollView from "../../../@ui/theme-scroll-view/ThemeScrollView";
 import ScalableText from "../../../@ui/scalable-text/ScalableText";
-import Input from "../../../@ui/input/Input";
 import Button from "../../../@ui/button/Button";
 import { COLORS } from "../../../colors";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { THomeStackNavigator } from "../../../navigators/tab-navigator/sub-stack-navigator/HomeStackNavigator";
 import ReviewPage from "./review-page";
+
 export default function BankDetails() {
 
   const navigation = useNavigation<THomeStackNavigator>();
   const route = useRoute();
   const [ifscCode, setIfscCode] = useState("");
-const [ifscError, setIfscError] = useState<string>("");
+  const [ifscError, setIfscError] = useState<string>("");
 
   const { control, handleSubmit, watch, setValue } = useForm({mode:"onSubmit"});
   const accNumber = watch("accountNo");
   
 
-// ⬇️ YEH ADD KARO (onNext se pehle)
-// IFSC API call function - validate IFSC code
-const validateIFSC = async (ifsc: string) => {
-  try {
-    const response = await axios.get(`https://ifsc.razorpay.com/${ifsc}`);
-    if (response.data && response.data.BANK) {
-      // Auto-fill bank name if valid
-      setValue("bankName", response.data.BANK);
-      setIfscError("");
-      return true;
+  // IFSC API call function - validate IFSC code
+  const validateIFSC = async (ifsc: string) => {
+    try {
+      const response = await axios.get(`https://ifsc.razorpay.com/${ifsc}`);
+      if (response.data && response.data.BANK) {
+        // Auto-fill bank name if valid
+        setValue("bankName", response.data.BANK);
+        setIfscError("");
+        return true;
+      }
+      return false;
+    } catch (error: any) {
+      setIfscError("Invalid IFSC code");
+      return false;
     }
-    return false;
-  } catch (error: any) {
-    setIfscError("Invalid IFSC code");
-    return false;
-  }
-};
+  };
 
-const onNext = async (data:any)=>{
+  const onNext = async (data:any)=>{
     // Validate IFSC code before proceeding
     if (data.ifsc && data.ifsc.length === 11) {
       const isValid = await validateIFSC(data.ifsc);
@@ -91,8 +89,8 @@ const onNext = async (data:any)=>{
 
           <ThemeScrollView contentContainerStyle={{paddingBottom:60}}>
 
-            <ScalableText style={styles.heading}>      Bank Details</ScalableText>
-            <ScalableText style={styles.subtext}>     Step 5 of 5 - Enter Information</ScalableText>
+            <ScalableText style={styles.heading}>Bank Details</ScalableText>
+            <ScalableText style={styles.subtext}>Step 5 of 5 - Enter Information</ScalableText>
 
             {/* 🏦 BANK NAME */}
             <Label text="Bank Name*"/>
@@ -101,14 +99,23 @@ const onNext = async (data:any)=>{
               name="bankName"
               rules={{
                 required:"This field is required",
-                pattern:{value:/^[A-Za-z ]+$/,message:"Alphabets only"}
+                pattern:{value:/^[A-Za-z ]+$/,message:"Insert only normal characters"}
               }}
-              render={({field:{value,onChange}})=>(
-                <Input name="bankName" handler={{control}} placeholder="Enter bank name"
-                containerStyles={styles.input} 
-                inputStyles={{fontFamily: undefined,paddingLeft:-6}}
-                value={value} onChangeText={onChange}
-                />
+              render={({field:{value,onChange}, fieldState:{error}})=>(
+                <>
+                  <TextInput
+                    placeholder="Enter bank name"
+                    style={[
+                      styles.inputField,
+                      error && styles.inputError
+                    ]}
+                    value={value} 
+                    onChangeText={onChange}
+                  />
+                  {error && (
+                    <Text style={styles.errorText}>{error.message}</Text>
+                  )}
+                </>
               )}
             />
 
@@ -121,11 +128,22 @@ const onNext = async (data:any)=>{
                 required:"This field is required",
                 pattern:{value:/^[0-9]+$/,message:"Numbers only"}
               }}
-              render={({field:{value,onChange}})=>(
-                <Input name="accountNo" handler={{control}} placeholder="Enter account number"
-  keyboardType="number-pad" containerStyles={styles.input}
-  inputStyles={{fontFamily: undefined,paddingLeft:-6}}
-  value={value} onChangeText={onChange}/>
+              render={({field:{value,onChange}, fieldState:{error}})=>(
+                <>
+                  <TextInput
+                    placeholder="Enter account number"
+                    keyboardType="number-pad" 
+                    style={[
+                      styles.inputField,
+                      error && styles.inputError
+                    ]}
+                    value={value} 
+                    onChangeText={onChange}
+                  />
+                  {error && (
+                    <Text style={styles.errorText}>{error.message}</Text>
+                  )}
+                </>
               )}
             />
 
@@ -138,11 +156,22 @@ const onNext = async (data:any)=>{
                 required:"This field is required",
                 validate:(v)=> v===accNumber || "Account numbers do not match"
               }}
-              render={({field:{value,onChange}})=>(
-                <Input name="confirmAccNo" handler={{control}} placeholder="Confirm account number"
-  keyboardType="number-pad" containerStyles={styles.input}
-  inputStyles={{fontFamily: undefined,paddingLeft:-6}}
-  value={value} onChangeText={onChange}/>
+              render={({field:{value,onChange}, fieldState:{error}})=>(
+                <>
+                  <TextInput
+                    placeholder="Confirm account number"
+                    keyboardType="number-pad" 
+                    style={[
+                      styles.inputField,
+                      error && styles.inputError
+                    ]}
+                    value={value} 
+                    onChangeText={onChange}
+                  />
+                  {error && (
+                    <Text style={styles.errorText}>{error.message}</Text>
+                  )}
+                </>
               )}
             />
 
@@ -155,27 +184,29 @@ const onNext = async (data:any)=>{
                 required:"This field is required",
                 pattern:{value:/^[A-Za-z0-9]{11}$/,message:"Must be 11 characters"}
               }}
-              render={({field:{value,onChange}})=>(
-                <View>
-                 <Input 
-  name="ifsc" 
-  handler={{control}} 
-  placeholder="Enter IFSC code"
-  containerStyles={styles.input}
-  inputStyles={{fontFamily: undefined,paddingLeft:-6}}
-  value={value} 
-  onChangeText={(text) => {
-    const upperText = text.toUpperCase();
-    onChange(upperText);
-    setIfscCode(upperText);
-    setIfscError(""); // Reset error when user types
-  }}
-/>
-                  {/* Error state - show when Next button is clicked and IFSC is invalid */}
-                  {ifscError && (
-                    <Text style={styles.errorText}>{ifscError}</Text>
+              render={({field:{value,onChange}, fieldState:{error}})=>(
+                <>
+                  <TextInput
+                    placeholder="Enter IFSC code"
+                    style={[
+                      styles.inputField,
+                      (error || ifscError) && styles.inputError
+                    ]}
+                    value={value} 
+                    onChangeText={(text) => {
+                      const upperText = text.toUpperCase();
+                      onChange(upperText);
+                      setIfscCode(upperText);
+                      setIfscError(""); // Reset error when user types
+                    }}
+                  />
+                  {/* Show validation error OR API error */}
+                  {(error || ifscError) && (
+                    <Text style={styles.errorText}>
+                      {error?.message || ifscError}
+                    </Text>
                   )}
-                </View>
+                </>
               )}
             />
             
@@ -188,7 +219,7 @@ const onNext = async (data:any)=>{
           <Button 
             title="Back"
             btnStyles={styles.backBtn}
-            btnTxtStyles={{color:"#000",fontSize:16}}
+            btnTxtStyles={{color:"#fff",fontSize:16}}
             onPress={()=> navigation.goBack()}
           />
 
@@ -197,13 +228,12 @@ const onNext = async (data:any)=>{
             btnStyles={styles.skipBtn}
             btnTxtStyles={{color:"#fff",fontSize:16}}
             onPress={() => {
-              // Same data pass karo jo onNext me pass kar rahe ho
               const params = route.params as any;
               navigation.navigate("ReviewPage", {
                 employeeData: params?.employeeData,
                 highestQualificationData: params?.highestQualificationData,
                 educationDetailsData: params?.educationDetailsData,
-                bankDetailsData: {}, // Empty kyunki skip kar rahe hain
+                bankDetailsData: {},
                 employeeType: params?.employeeType,
                 salaryType: params?.salaryType,
                 fixedSalary: params?.fixedSalary,
@@ -218,7 +248,6 @@ const onNext = async (data:any)=>{
             btnStyles={styles.nextBtn}
             btnTxtStyles={{color:"#fff",fontSize:16}}
             onPress={handleSubmit(onNext)}
-          
           />
 
         </View>
@@ -245,14 +274,29 @@ const styles = StyleSheet.create({
   heading:{fontSize:22,fontWeight:"bold",color:"#000",marginBottom:5},
   subtext:{fontSize:13,color:"#666",marginBottom:18},
 
-  input:{marginBottom:10,height:48,paddingVertical:-1,width:"104%",
+  input:{marginBottom:10,height:48,paddingVertical:-1,width:"104%"},
+  
+  inputField: {
+    height: 48,
+    borderWidth: 1,
+    borderColor: "#0a0a0a",
+    borderRadius: 10,
+    paddingLeft: 12,
+    marginBottom: 10,
+    fontSize: 14,
+    color: "#000",
+  },
+  
+  inputError: {
+    borderColor: "red",
+    borderWidth: 2,
   },
   
   label:{fontSize:14,fontWeight:"600",marginBottom:6,marginTop:10,color:"#000"},
   error:{color:"red",fontSize:12,marginBottom:8},
 
   bottomRow:{flexDirection:"row",width:"90%",justifyContent:"space-between",marginTop:25,marginBottom:18},
-  backBtn:{flex:1,height:50,backgroundColor:"#E6E6E6",borderRadius:10,marginRight:8},
+  backBtn:{flex:1,height:50,backgroundColor:"#003B73",borderRadius:10,marginRight:8},
   skipBtn:{flex:1,height:50,backgroundColor:"#003B73",borderRadius:10,marginRight:8},
   nextBtn:{flex:1,height:50,backgroundColor:"#003B73",borderRadius:10},
 
@@ -267,7 +311,8 @@ const styles = StyleSheet.create({
     color: "red",
     fontSize: 12,
     marginTop: 4,
-    marginLeft: 2
+    marginLeft: 2,
+    marginBottom: 6,
   },
   bankInfo: {
     marginTop: 8,
@@ -293,4 +338,3 @@ const styles = StyleSheet.create({
     color: "#999"
   }
 });
-

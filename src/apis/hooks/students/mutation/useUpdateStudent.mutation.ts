@@ -13,40 +13,65 @@ export const useUpdateStudentMutation = () => {
       console.log('📝 === UPDATE STUDENT API CALL ===');
       console.log('API URL:', apiUrls.student.UPDATE_STUDENT);
       
-      // Try simpler payload structure first
-      const updatePayload = {
+      // Build user object from authUser and selectedOrganization
+      const userCustomerName = authUser?.customerName 
+        ? (authUser?.lastName ? `${authUser.customerName} ${authUser.lastName}` : authUser.customerName)
+        : '';
+      
+      const userObject = {
+        userCustomerId: authUser?.customerId || '',
+        userCustomerName: userCustomerName,
+        userCustomerEmail: authUser?.customerEmail || '',
+        roleName: selectedOrganization?.role?.roleName || '',
+        roleId: selectedOrganization?.role?.roleId || '',
+        userEmployeeId: authUser?.employeeId || '',
+      };
+      
+      // Build the new payload structure
+      console.log('🔧 === MUTATION: BUILDING API PAYLOAD ===');
+      console.log('🔧 Received payload.dateOfAdmission:', payload.dateOfAdmission);
+      console.log('🔧 Received payload.studentDateOfBirth:', payload.studentDateOfBirth);
+      
+      // Only include dateOfAdmission if it's actually provided (not undefined)
+      // This prevents clearing the date if backend doesn't return it
+      const updatePayload: any = {
+        user: userObject,
+        customerId: selectedOrganization?.customerId || '',
         rollNo: payload.rollNo || '',
+        organizationId: selectedOrganization?.organizationId || '',
         studentFirstName: payload.studentFirstName || '',
         studentLastName: payload.studentLastName || '',
+        studentEnrollmentNumber: payload.studentEnrollmentNumber || payload.enrollmentNumber || '',
         studentEmail: payload.studentEmail || '',
+        studentDateOfBirth: payload.studentDateOfBirth || null,
+        studentCourse: payload.studentCourse || payload.collegeCourse || '',
+        studentCollage: payload.studentCollage || payload.collegeName || '',
+        studentSemester: payload.studentSemester || payload.collegeSemester || '',
         studentContact: payload.studentContact || '',
         studentFatherName: payload.studentFatherName || '',
         studentFatherContact: payload.studentFatherContact || '',
         studentAddress: payload.studentAddress || '',
         studentGender: payload.studentGender || '',
-        studentDateOfBirth: payload.studentDateOfBirth || '',
-        dateOfAdmission: payload.dateOfAdmission || '',
-        collegeName: payload.collegeName || '',
-        collegeCourse: payload.collegeCourse || '',
-        departmentName: payload.departmentName || '',
-        collegeSemester: payload.collegeSemester || '',
-        studentStatus: payload.studentStatus || 'active',
-        // Map form fields to API fields
-        studentCollage: payload.collegeName || '',
-        studentCourse: payload.collegeCourse || '',
-        studentDepartmentName: payload.departmentName || '',
-        studentSemester: payload.collegeSemester || '',
+        studentDepartmentName: payload.studentDepartmentName || payload.departmentName || '',
+        studentImage: payload.studentImage || '',
+        studentDynamicFields: payload.studentDynamicFields || [],
       };
       
-      console.log('Payload:', JSON.stringify(updatePayload, null, 2));
+      // Only add dateOfAdmission if it's explicitly provided (not undefined)
+      // This way, if backend doesn't return it, we don't accidentally clear it
+      if (payload.dateOfAdmission !== undefined) {
+        updatePayload.dateOfAdmission = payload.dateOfAdmission || null;
+      }
+      
+      console.log('🔧 === FINAL API PAYLOAD ===');
+      console.log('🔧 Full Payload:', JSON.stringify(updatePayload, null, 2));
+      console.log('🔧 dateOfAdmission in API payload:', updatePayload.dateOfAdmission);
+      console.log('🔧 studentDateOfBirth in API payload:', updatePayload.studentDateOfBirth);
       
       const data = await request({
-        method: 'PUT',
+        method: 'POST',
         url: apiUrls.student.UPDATE_STUDENT,
         data: updatePayload,
-        params: {
-          rollNo: payload.rollNo
-        }
       });
       
       console.log('📝 API Response:', JSON.stringify(data, null, 2));
@@ -55,4 +80,4 @@ export const useUpdateStudentMutation = () => {
       return data;
     }
   });
-}; 
+};

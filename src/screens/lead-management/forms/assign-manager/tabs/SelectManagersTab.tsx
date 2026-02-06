@@ -57,12 +57,12 @@ const SelectManagersTab: FC<ISelectManagersTab> = ({
             </Col>
             <Col style={styles.headerColumn}>
               <ScalableText style={styles.headerTitle} fontFamily="SemiBold">
-                Name
+                Nam
               </ScalableText>
             </Col>
             <Col style={styles.headerColumn}>
               <ScalableText style={styles.headerTitle} fontFamily="SemiBold">
-                Designation
+                Designati
               </ScalableText>
             </Col>
           </Row>

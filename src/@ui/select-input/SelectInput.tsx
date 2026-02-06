@@ -1,5 +1,5 @@
 import { StyleSheet, View, ViewStyle } from "react-native";
-import React, { FC, memo } from "react";
+import React, { FC, memo, useMemo } from "react";
 import SelectDropdown from "react-native-select-dropdown";
 
 import AutoHeightImage from "../auto-height-image/AutoHeightImage";
@@ -22,9 +22,15 @@ const SelectInput: FC<ISelectInput> = ({
   dropdownButtonStyle,
   value = "",
 }) => {
+  // Find the matching option object for defaultValue
+  const defaultValue = useMemo(() => {
+    if (!value) return null;
+    return options.find((opt) => opt.value === value) || null;
+  }, [value, options]);
+
   return (
     <SelectDropdown
-      defaultValue={value}
+      defaultValue={defaultValue}
       data={options}
       onSelect={(selectedItem) => {
         onChange(selectedItem.value);
@@ -39,7 +45,7 @@ const SelectInput: FC<ISelectInput> = ({
               style={styles.dropdownButtonTxtStyle}
               numberOfLines={1}
             >
-              {selectedItem?.value || label}
+              {selectedItem?.label || label}
             </ScalableText>
             <AutoHeightImage source={IMAGES.chevronDownIcon} width={10} />
           </View>

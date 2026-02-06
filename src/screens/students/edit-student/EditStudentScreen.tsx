@@ -5,7 +5,13 @@ import { yupResolver } from '@hookform/resolvers/yup';
 import * as yup from 'yup';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useStudentDetailsQuery } from '../../../apis/hooks/students/query/useStudentDetails.query';
-import { useUpdateStudentMutation } from '../../../apis/hooks/students/mutation/useUpdateStudent.mutation.ts';
+import { useQueryClient } from '@tanstack/react-query';
+import { useUpdateStudentMutation } from '../../../apis/hooks/students/mutation/useUpdateStudent.mutation';
+import { useDeleteStudentMutation } from '../../../apis/hooks/students/mutation/useDeleteStudent.mutation';
+import { useUpdateStudentAndBatchInCourseMutation } from '../../../apis/hooks/organization/mutation/useUpdateStudentAndBatchInCourse.mutation';
+import { apiUrls } from '../../../apis/urls';
+import { useSelector } from 'react-redux';
+import { RootState } from '../../../app/store';
 import SafeView from '../../../@ui/safe-view/SafeView';
 import AppHeader from '../../../@ui/app-header/AppHeader';
 import Input from '../../../@ui/input/Input';
@@ -17,15 +23,32 @@ import { COLORS } from '../../../colors';
 import ThemeScrollView from '../../../@ui/theme-scroll-view/ThemeScrollView';
 import Flex from '../../../@ui/flex/Flex';
 import FileInputField from '../../../@ui/file-input/FileInputField';
+import moment from 'moment';
 
 // Validation schema
 const editStudentValidation = yup.object().shape({
-  studentFirstName: yup.string().required('First name is required').min(2, 'First name must be at least 2 characters'),
-  studentLastName: yup.string().optional(),
+  studentFirstName: yup.string()
+    .required('First name is required')
+    .min(2, 'First name must be at least 2 characters')
+    .matches(/^[A-Za-z\s]+$/, 'First name can only contain alphabets and spaces'),
+  studentLastName: yup.string()
+    .optional()
+    .matches(/^[A-Za-z\s]*$/, 'Last name can only contain alphabets and spaces'),
   studentEmail: yup.string().email('Invalid email').optional(),
   studentContact: yup.string().required('Phone number is required').matches(/^[6-9]\d{9}$/, 'Please enter a valid 10-digit phone number'),
-  studentFatherName: yup.string().optional(),
-  studentFatherContact: yup.string().optional(),
+  studentFatherName: yup.string()
+    .optional()
+    .matches(/^[A-Za-z\s]*$/, 'Father name can only contain alphabets and spaces'),
+  studentFatherContact: yup.string()
+    .optional()
+    .test('length', 'Father contact number must be exactly 10 digits', (value) => {
+      if (!value || value.trim() === '') return true; // Optional field, allow empty
+      return /^\d{10}$/.test(value);
+    })
+    .test('valid-start', 'Father contact number must start with 6, 7, 8, or 9', (value) => {
+      if (!value || value.trim() === '') return true; // Optional field, allow empty
+      return /^[6-9]/.test(value);
+    }),
   studentAddress: yup.string().optional(),
   studentGender: yup.string().optional(),
   studentDateOfBirth: yup.string().nullable().optional(),
@@ -53,15 +76,141 @@ const EditStudentScreen = () => {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const { studentData } = route.params || {};
+  const queryClient = useQueryClient();
+  const { authUser, selectedOrganization } = useSelector((state: RootState) => state.auth);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [customFields, setCustomFields] = useState<any[]>(studentData?.studentDynamicFields || []);
   
   // Get student details if not passed in params
   const { data: studentDetailsData, isLoading } = useStudentDetailsQuery(studentData?.rollNo || '');
   const studentDetails = studentData || studentDetailsData?.data;
+
+  // Helper function to parse date string to Date object
+  // Handles formats like: DD-MM-YY, DD-MM-YYYY, DD/MM/YY, DD/MM/YYYY, ISO strings, timestamps
+  const parseDateForInput = (dateValue: any): Date | null => {
+    if (!dateValue) return null;
+    
+    try {
+      // If it's already a Date object
+      if (dateValue instanceof Date) {
+        return isNaN(dateValue.getTime()) ? null : dateValue;
+      }
+      
+      // If it's a number (timestamp)
+      if (typeof dateValue === 'number') {
+        const date = new Date(dateValue);
+        return isNaN(date.getTime()) ? null : date;
+      }
+      
+      // If it's a string
+      if (typeof dateValue === 'string') {
+        const trimmed = dateValue.trim();
+        if (!trimmed || trimmed === '' || trimmed === 'null' || trimmed === 'undefined') {
+          return null;
+        }
+        
+        // Handle DD-MM-YY or DD-MM-YYYY format
+        if (trimmed.includes('-')) {
+          const parts = trimmed.split('-');
+          if (parts.length === 3) {
+            const [day, month, year] = parts.map(p => p.trim());
+            if (day && month && year) {
+              // Handle 2-digit year (YY) - assume 20XX for years < 50, 19XX otherwise
+              let fullYear = parseInt(year);
+              if (year.length === 2) {
+                fullYear = parseInt(year) < 50 ? 2000 + parseInt(year) : 1900 + parseInt(year);
+              }
+              const date = new Date(fullYear, parseInt(month) - 1, parseInt(day));
+              if (!isNaN(date.getTime())) {
+                return date;
+              }
+            }
+          }
+        }
+        
+        // Handle DD/MM/YY or DD/MM/YYYY format
+        if (trimmed.includes('/')) {
+          const parts = trimmed.split('/');
+          if (parts.length === 3) {
+            const [day, month, year] = parts.map(p => p.trim());
+            if (day && month && year) {
+              // Handle 2-digit year (YY) - assume 20XX for years < 50, 19XX otherwise
+              let fullYear = parseInt(year);
+              if (year.length === 2) {
+                fullYear = parseInt(year) < 50 ? 2000 + parseInt(year) : 1900 + parseInt(year);
+              }
+              const date = new Date(fullYear, parseInt(month) - 1, parseInt(day));
+              if (!isNaN(date.getTime())) {
+                return date;
+              }
+            }
+          }
+        }
+        
+        // Try parsing with moment (handles various formats)
+        const momentDate = moment(trimmed, ['DD-MM-YYYY', 'DD-MM-YY', 'DD/MM/YYYY', 'DD/MM/YY', 'YYYY-MM-DD', 'MM-DD-YYYY', 'MM/DD/YYYY', moment.ISO_8601], true);
+        if (momentDate.isValid()) {
+          return momentDate.toDate();
+        }
+        
+        // Fallback to standard Date parsing
+        const date = new Date(trimmed);
+        if (!isNaN(date.getTime())) {
+          return date;
+        }
+      }
+      
+      return null;
+    } catch (error) {
+      console.error('Error parsing date:', error, 'Value:', dateValue);
+      return null;
+    }
+  };
+
+  // Helper function to format Date object to DD-MM-YYYY string for API (matching create format)
+  const formatDateForAPI = (dateValue: any): string | null => {
+    if (!dateValue) return null;
+    
+    try {
+      let date: Date;
+      if (dateValue instanceof Date) {
+        date = dateValue;
+      } else if (typeof dateValue === 'string') {
+        // If it's already a formatted string (DD-MM-YY or DD-MM-YYYY), return as is
+        if (dateValue.match(/^\d{2}[-/]\d{2}[-/]\d{2,4}$/)) {
+          // Convert DD-MM-YY to DD-MM-YYYY if needed
+          const parts = dateValue.replace(/\//g, '-').split('-');
+          if (parts.length === 3 && parts[2].length === 2) {
+            const year = parseInt(parts[2]);
+            const fullYear = year < 50 ? 2000 + year : 1900 + year;
+            return `${parts[0]}-${parts[1]}-${fullYear}`;
+          }
+          return dateValue.replace(/\//g, '-');
+        }
+        date = new Date(dateValue);
+      } else if (typeof dateValue === 'number') {
+        date = new Date(dateValue);
+      } else {
+        return null;
+      }
+      
+      if (isNaN(date.getTime())) return null;
+      
+      const day = String(date.getDate()).padStart(2, '0');
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const year = date.getFullYear();
+      // Format as DD-MM-YYYY (full year to match create format)
+      return `${day}-${month}-${year}`;
+    } catch (error) {
+      console.error('Error formatting date for API:', error, 'Value:', dateValue);
+      return null;
+    }
+  };
   
   // Update mutation
   const { mutateAsync: updateStudent, isPending } = useUpdateStudentMutation();
+  const { mutateAsync: deleteStudent } = useDeleteStudentMutation();
+  const { mutateAsync: updateStudentAndBatchInCourse } = useUpdateStudentAndBatchInCourseMutation();
 
   const handler = useForm({
     defaultValues: {
@@ -73,21 +222,57 @@ const EditStudentScreen = () => {
       studentFatherContact: studentDetails?.studentFatherContact || '',
       studentAddress: studentDetails?.studentAddress || '',
       studentGender: studentDetails?.studentGender || '',
-      studentDateOfBirth: studentDetails?.studentDateOfBirth || '',
-      dateOfAdmission: studentDetails?.dateOfAdmission || '',
+      studentDateOfBirth: parseDateForInput(studentDetails?.studentDateOfBirth),
+      dateOfAdmission: parseDateForInput(studentDetails?.dateOfAdmission),
       collegeName: studentDetails?.studentCollage || '',
       collegeCourse: studentDetails?.studentCourse || '',
       departmentName: studentDetails?.studentDepartmentName || '',
       collegeSemester: studentDetails?.studentSemester || '',
       studentStatus: studentDetails?.studentStatus || 'active',
+      studentImage: studentDetails?.studentImage || '', // ✅ Add studentImage to form
     },
     resolver: yupResolver(editStudentValidation),
   });
 
+  // Store dateOfAdmission in a ref to preserve it across updates
+  const dateOfAdmissionRef = React.useRef<string | null | undefined>(undefined);
+
   // Update form when student details load
   useEffect(() => {
     if (studentDetails) {
-      handler.reset({
+      console.log('🔍 === LOADING STUDENT DETAILS ===');
+      console.log('🔍 Full studentDetails object:', JSON.stringify(studentDetails, null, 2));
+      console.log('🔍 Raw dateOfAdmission:', studentDetails.dateOfAdmission);
+      console.log('🔍 Raw dateOfAdmission type:', typeof studentDetails.dateOfAdmission);
+      console.log('🔍 Raw studentDateOfBirth:', studentDetails.studentDateOfBirth);
+      console.log('🔍 Raw studentDateOfBirth type:', typeof studentDetails.studentDateOfBirth);
+      
+      const dobDate = parseDateForInput(studentDetails.studentDateOfBirth);
+      
+      // Use stored dateOfAdmission if backend doesn't return it
+      let admissionDateValue = studentDetails.dateOfAdmission;
+      if (!admissionDateValue && dateOfAdmissionRef.current) {
+        admissionDateValue = dateOfAdmissionRef.current;
+        console.log('📌 Using stored dateOfAdmission from ref:', dateOfAdmissionRef.current);
+      }
+      
+      const admissionDate = parseDateForInput(admissionDateValue);
+      
+      // Store the dateOfAdmission value in ref for future use
+      if (admissionDate && admissionDate instanceof Date && !isNaN(admissionDate.getTime())) {
+        dateOfAdmissionRef.current = formatDateForAPI(admissionDate);
+      } else if (studentDetails.dateOfAdmission) {
+        dateOfAdmissionRef.current = studentDetails.dateOfAdmission;
+      }
+      
+      console.log('📅 === DATE PARSING RESULTS ===');
+      console.log('📅 Parsed DOB:', dobDate);
+      console.log('📅 Parsed DOB type:', dobDate instanceof Date ? 'Date' : typeof dobDate);
+      console.log('📅 Parsed Admission:', admissionDate);
+      console.log('📅 Parsed Admission type:', admissionDate instanceof Date ? 'Date' : typeof admissionDate);
+      console.log('📅 Stored dateOfAdmission in ref:', dateOfAdmissionRef.current);
+      
+      const formData = {
         studentFirstName: studentDetails.studentFirstName || '',
         studentLastName: studentDetails.studentLastName || '',
         studentEmail: studentDetails.studentEmail || '',
@@ -96,14 +281,25 @@ const EditStudentScreen = () => {
         studentFatherContact: studentDetails.studentFatherContact || '',
         studentAddress: studentDetails.studentAddress || '',
         studentGender: studentDetails.studentGender || '',
-        studentDateOfBirth: studentDetails.studentDateOfBirth || '',
-        dateOfAdmission: studentDetails.dateOfAdmission || '',
+        studentDateOfBirth: dobDate,
+        dateOfAdmission: admissionDate,
+        studentImage: studentDetails.studentImage || '',
         collegeName: studentDetails.studentCollage || '',
         collegeCourse: studentDetails.studentCourse || '',
         departmentName: studentDetails.studentDepartmentName || '',
         collegeSemester: studentDetails.studentSemester || '',
         studentStatus: studentDetails.studentStatus || 'active',
-      });
+      };
+      
+      console.log('📝 === FORM DATA BEING SET ===');
+      console.log('📝 dateOfAdmission in form:', formData.dateOfAdmission);
+      console.log('📝 studentDateOfBirth in form:', formData.studentDateOfBirth);
+      
+      handler.reset(formData);
+      
+      console.log('✅ === FORM RESET COMPLETE ===');
+      console.log('✅ Form dateOfAdmission value:', handler.getValues('dateOfAdmission'));
+      console.log('✅ Form studentDateOfBirth value:', handler.getValues('studentDateOfBirth'));
     }
   }, [studentDetails, handler]);
 
@@ -111,40 +307,204 @@ const EditStudentScreen = () => {
     setIsSubmitting(true);
     
     try {
+      const previousStatus = studentDetails?.studentStatus || 'active';
+      const newStatus = values.studentStatus;
+
+      // Build studentDynamicFields from customFields
+      const studentDynamicFields = customFields.map((field: any, index: number) => {
+        const fieldName = Object.keys(field).find(key => key !== 'type') || '';
+        const fieldValue = field[fieldName];
+        const fieldType = field.type || 'text';
+        
+        // Get the value from form if it exists, otherwise use existing value
+        const formFieldName = `customField_${index}`;
+        const allFormValues = handler.getValues();
+        const formValue = (allFormValues as any)[formFieldName];
+        
+        const dynamicField: any = {};
+        if (fieldName) {
+          dynamicField[fieldName] = formValue !== undefined && formValue !== '' ? formValue : fieldValue || '';
+        }
+        dynamicField.type = fieldType;
+        
+        return dynamicField;
+      });
+
       // Merge existing student data with updated values
-      const updatePayload = {
-        ...studentDetails, // Keep existing data
+      console.log('🔄 === PREPARING UPDATE PAYLOAD ===');
+      console.log('🔄 Form values.dateOfAdmission:', values.dateOfAdmission);
+      console.log('🔄 Form values.dateOfAdmission type:', typeof values.dateOfAdmission);
+      console.log('🔄 Form values.studentDateOfBirth:', values.studentDateOfBirth);
+      console.log('🔄 Form values.studentDateOfBirth type:', typeof values.studentDateOfBirth);
+      console.log('🔄 Existing studentDetails.dateOfAdmission:', studentDetails.dateOfAdmission);
+      
+      // Format dates properly - preserve existing date if not changed
+      const formattedDOB = formatDateForAPI(values.studentDateOfBirth);
+      const formattedAdmission = formatDateForAPI(values.dateOfAdmission);
+      
+      // Check if user actually selected a date (not just empty/null)
+      const hasNewAdmissionDate = values.dateOfAdmission && 
+        values.dateOfAdmission !== null && 
+        values.dateOfAdmission !== undefined &&
+        !isNaN(new Date(values.dateOfAdmission).getTime());
+      
+      // Use stored dateOfAdmission from ref if backend doesn't return it
+      const storedDateOfAdmission = dateOfAdmissionRef.current 
+        ? formatDateForAPI(dateOfAdmissionRef.current) 
+        : null;
+      
+      // Only include dateOfAdmission in payload if:
+      // 1. User selected a new date, OR
+      // 2. Existing date exists in studentDetails, OR
+      // 3. Stored date exists in ref (from previous load)
+      const finalDateOfAdmission = hasNewAdmissionDate 
+        ? formattedAdmission 
+        : (studentDetails.dateOfAdmission 
+            ? formatDateForAPI(studentDetails.dateOfAdmission) 
+            : storedDateOfAdmission);
+      
+      // Update ref with the final value
+      if (finalDateOfAdmission) {
+        dateOfAdmissionRef.current = finalDateOfAdmission;
+      }
+      
+      console.log('📅 === DATE FORMATTING RESULTS ===');
+      console.log('📅 formattedDOB:', formattedDOB);
+      console.log('📅 formattedAdmission:', formattedAdmission);
+      console.log('📅 hasNewAdmissionDate:', hasNewAdmissionDate);
+      console.log('📅 studentDetails.dateOfAdmission:', studentDetails.dateOfAdmission);
+      console.log('📅 storedDateOfAdmission from ref:', storedDateOfAdmission);
+      console.log('📅 dateOfAdmissionRef.current:', dateOfAdmissionRef.current);
+      console.log('📅 Final dateOfAdmission to send:', finalDateOfAdmission);
+      
+      const updatePayload: any = {
         rollNo: studentDetails.rollNo,
         studentFirstName: values.studentFirstName,
         studentLastName: values.studentLastName,
+        studentEnrollmentNumber: studentDetails?.studentEnrollmentNumber || studentDetails?.enrollmentNumber || '',
         studentEmail: values.studentEmail,
         studentContact: values.studentContact,
         studentFatherName: values.studentFatherName,
         studentFatherContact: values.studentFatherContact,
         studentAddress: values.studentAddress,
         studentGender: values.studentGender,
-        studentDateOfBirth: values.studentDateOfBirth,
-        dateOfAdmission: values.dateOfAdmission,
+        studentDateOfBirth: formattedDOB,
         collegeName: values.collegeName,
         collegeCourse: values.collegeCourse,
         departmentName: values.departmentName,
         collegeSemester: values.collegeSemester,
-        studentStatus: values.studentStatus,
+        studentStatus: newStatus,
+        studentImage: values.studentImage || studentDetails?.studentImage || '', // ✅ Add studentImage to payload
         // Map form fields to API fields
         studentCollage: values.collegeName,
         studentCourse: values.collegeCourse,
         studentDepartmentName: values.departmentName,
         studentSemester: values.collegeSemester,
+        studentDynamicFields: studentDynamicFields,
       };
+      
+      // Only include dateOfAdmission if it has a valid value
+      // This prevents clearing the date if backend doesn't return it
+      if (finalDateOfAdmission !== undefined && finalDateOfAdmission !== null && finalDateOfAdmission !== '') {
+        updatePayload.dateOfAdmission = finalDateOfAdmission;
+      }
 
-      console.log('📝 === UPDATE STUDENT PAYLOAD ===');
-      console.log('Payload:', JSON.stringify(updatePayload, null, 2));
+      console.log('📝 === FINAL UPDATE PAYLOAD ===');
+      console.log('📝 Full Payload:', JSON.stringify(updatePayload, null, 2));
+      console.log('📝 dateOfAdmission in payload:', updatePayload.dateOfAdmission);
+      console.log('📝 studentDateOfBirth in payload:', updatePayload.studentDateOfBirth);
 
       const response = await updateStudent(updatePayload);
       
-      console.log('📝 Update response:', response);
+      console.log('📝 === UPDATE RESPONSE ===');
+      console.log('📝 Full Response:', JSON.stringify(response, null, 2));
+      console.log('📝 Response data:', response?.data);
+      console.log('📝 Response statusCode:', response?.statusCode || response?.status);
       
-      if (response.statusCode === 200) {
+      // Handle response structure - could be response.data or response directly
+      const responseData = (response as any)?.data || response;
+      const statusCode =
+        (response as any)?.statusCode ??
+        (responseData as any)?.statusCode ??
+        (response as any)?.status;
+      
+      // Store dateOfAdmission in ref after successful update
+      if (statusCode === 200 || statusCode === 201) {
+        // If we sent dateOfAdmission, store it in ref
+        if (finalDateOfAdmission) {
+          dateOfAdmissionRef.current = finalDateOfAdmission;
+          console.log('💾 Stored dateOfAdmission in ref after update:', finalDateOfAdmission);
+        }
+        // Also check if response contains dateOfAdmission
+        const responseDateOfAdmission = (responseData as any)?.dateOfAdmission || (responseData as any)?.data?.dateOfAdmission;
+        if (responseDateOfAdmission) {
+          dateOfAdmissionRef.current = responseDateOfAdmission;
+          console.log('💾 Stored dateOfAdmission from response:', responseDateOfAdmission);
+        }
+        
+        const statusChanged = previousStatus !== newStatus;
+
+        if (statusChanged) {
+          // 1) Call deleteStudentDetails API to update status on main student record
+          try {
+            const deletePayload = {
+              user: {
+                userCustomerId: authUser?.customerId || '',
+                userCustomerName: authUser?.customerName || '',
+                userCustomerEmail: authUser?.customerEmail || '',
+                roleName: (selectedOrganization as any)?.role?.roleName || '',
+                roleId: (selectedOrganization as any)?.role?.roleId || '',
+                userEmployeeId: selectedOrganization?.organizationId || '',
+              },
+              customerId: selectedOrganization?.customerId || '',
+              rollNo: studentDetails.rollNo,
+              organizationId: selectedOrganization?.organizationId || '',
+              studentStatus: newStatus,
+            };
+
+            console.log('🗑️ === STATUS UPDATE VIA DELETE STUDENT CALL ===');
+            console.log('Payload:', JSON.stringify(deletePayload, null, 2));
+            const deleteResp = await deleteStudent(deletePayload);
+            console.log('🗑️ Status update response:', deleteResp);
+          } catch (deleteError) {
+            console.log('⚠️ Error while updating status via deleteStudentDetails:', deleteError);
+          }
+
+          // 2) Call updateStudentAndBatchInCourse for each course (if any)
+          try {
+            const courses = (studentDetails as any)?.courses || [];
+            if (Array.isArray(courses) && courses.length > 0) {
+              for (const course of courses) {
+                if (!course?.courseId) continue;
+
+                await updateStudentAndBatchInCourse({
+                  courseId: course.courseId,
+                  rollNo: studentDetails.rollNo,
+                  studentStatus: newStatus,
+                });
+              }
+            }
+          } catch (courseError) {
+            console.log('⚠️ Error while updating student & batch in course:', courseError);
+          }
+        }
+
+        // Invalidate student related queries so that listing/profile screens get fresh data
+        try {
+          const rollNo = studentDetails?.rollNo || studentData?.rollNo || updatePayload.rollNo;
+          if (rollNo) {
+            await queryClient.invalidateQueries({
+              queryKey: [apiUrls.student.FETCH_STUDENT_DETAILS, rollNo],
+            });
+          }
+          // Also refresh student list (if any screen uses it)
+          await queryClient.invalidateQueries({
+            queryKey: [apiUrls.student.FETCH_ALL_STUDENTS],
+          });
+        } catch (e) {
+          console.log('⚠️ Error invalidating student queries', e);
+        }
+
         Alert.alert(
           'Success', 
           'Student details updated successfully!',
@@ -158,7 +518,7 @@ const EditStudentScreen = () => {
           ]
         );
       } else {
-        throw new Error(response.message || 'Failed to update student');
+        throw new Error(responseData?.message || response?.message || 'Failed to update student');
       }
     } catch (error) {
       console.error('Update error:', error);
@@ -167,11 +527,9 @@ const EditStudentScreen = () => {
       setIsSubmitting(false);
     }
   };
-
   const onCancel = () => {
     navigation.goBack();
   };
-
   if (isLoading) {
     return (
       <SafeView>
@@ -181,7 +539,7 @@ const EditStudentScreen = () => {
           showDrawer={false}
         />
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={COLORS.primary} />
+          <ActivityIndicator size="large" color={COLORS.primary}/>
           <ScalableText style={styles.loadingText} fontFamily="Medium">Loading student details...</ScalableText>
         </View>
       </SafeView>
@@ -216,6 +574,11 @@ const EditStudentScreen = () => {
                  label="Enter first name"
                  containerStyles={styles.inputContainer}
                  placeholder="Enter first name"
+                 onChangeText={(text) => {
+                   // Remove numbers and special characters, keep only alphabets and spaces
+                   const cleanText = text.replace(/[^A-Za-z\s]/g, '');
+                   handler.setValue('studentFirstName', cleanText);
+                 }}
                />
              </View>
             
@@ -229,6 +592,11 @@ const EditStudentScreen = () => {
                 label="Enter last name"
                 containerStyles={styles.inputContainer}
                 placeholder="Enter last name"
+                onChangeText={(text) => {
+                  // Remove numbers and special characters, keep only alphabets and spaces
+                  const cleanText = text.replace(/[^A-Za-z\s]/g, '');
+                  handler.setValue('studentLastName', cleanText);
+                }}
               />
             </View>
             
@@ -270,6 +638,11 @@ const EditStudentScreen = () => {
                 label="Enter father's name"
                 containerStyles={styles.inputContainer}
                 placeholder="Enter father's name"
+                onChangeText={(text) => {
+                  // Remove numbers and special characters, keep only alphabets and spaces
+                  const cleanText = text.replace(/[^A-Za-z\s]/g, '');
+                  handler.setValue('studentFatherName', cleanText);
+                }}
               />
             </View>
             
@@ -284,6 +657,14 @@ const EditStudentScreen = () => {
                 keyboardType="phone-pad"
                 containerStyles={styles.inputContainer}
                 placeholder="Enter father's phone number"
+                maxLength={10}
+                onChangeText={(text) => {
+                  // Remove any non-digit characters
+                  const cleanText = text.replace(/\D/g, '');
+                  // Limit to 10 digits
+                  const limitedText = cleanText.slice(0, 10);
+                  handler.setValue('studentFatherContact', limitedText);
+                }}
               />
             </View>
             
@@ -421,6 +802,16 @@ const EditStudentScreen = () => {
                    name="studentImage"
                  />
                </View>
+               {/* Image Preview */}
+               {handler.watch('studentImage') && (
+                 <View style={styles.imagePreviewContainer}>
+                   <Image
+                     source={{ uri: handler.watch('studentImage') }}
+                     style={styles.imagePreview}
+                     resizeMode="cover"
+                   />
+                 </View>
+               )}
              </View>
              
              {/* Custom Fields Section */}
@@ -619,6 +1010,17 @@ const styles = StyleSheet.create({
   // Image styles
   imageContainer: {
     marginTop: 8,
+  },
+  imagePreviewContainer: {
+    marginTop: 12,
+    alignItems: 'center',
+  },
+  imagePreview: {
+    width: 150,
+    height: 150,
+    borderRadius: 75,
+    borderWidth: 3,
+    borderColor: COLORS.primary,
   },
   // Custom field styles
   customFieldContainer: {

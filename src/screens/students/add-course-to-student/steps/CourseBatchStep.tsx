@@ -46,6 +46,14 @@ const CourseBatchStep: React.FC<CourseBatchStepProps> = ({ onNext }) => {
     resolver: yupResolver(validationSchema),
   });
 
+  // Helper function to capitalize first letter of first word
+  const capitalizeFirstWord = (text: string): string => {
+    if (!text) return '';
+    const trimmed = text.trim();
+    if (trimmed.length === 0) return '';
+    return trimmed.charAt(0).toUpperCase() + trimmed.slice(1);
+  };
+
   // Extract course options from API and filter out already enrolled courses
   const courseOptions = useMemo(() => {
     if (!courseLoading && courseData?.statusCode === 200 && Array.isArray(courseData?.data)) {
@@ -66,7 +74,7 @@ const CourseBatchStep: React.FC<CourseBatchStepProps> = ({ onNext }) => {
       console.log('=== END COURSE FILTERING DEBUG ===');
       
       return filteredCourses.map((course: any) => ({
-        label: course.courseName,
+        label: capitalizeFirstWord(course.courseName),
         value: course.courseName,
         courseId: course.courseId,
         courseFee: course.courseFee,
@@ -253,12 +261,6 @@ const CourseBatchStep: React.FC<CourseBatchStepProps> = ({ onNext }) => {
                 </TouchableOpacity>
               )}
             </View>
-            {/* Show info about filtered courses */}
-            {studentDetails?.courses && studentDetails.courses.length > 0 && (
-              <ScalableText style={styles.helperText} fontFamily="Regular">
-                Note: {studentDetails.courses.length} course(s) already enrolled are hidden from the list.
-              </ScalableText>
-            )}
           </View>
 
           <View style={styles.inputSpacing}>

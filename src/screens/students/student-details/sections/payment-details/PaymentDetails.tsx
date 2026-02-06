@@ -1,4 +1,4 @@
-import { StyleSheet, View, TouchableOpacity, Alert, TouchableWithoutFeedback } from "react-native";
+import { StyleSheet, View, TouchableOpacity, Alert } from "react-native";
 import React, { FC, memo, useState } from "react";
 import Flex from "../../../../../@ui/flex/Flex";
 import ScalableText from "../../../../../@ui/scalable-text/ScalableText";
@@ -17,7 +17,6 @@ interface IPaymentDetails {
 
 const PaymentDetails: FC<IPaymentDetails> = ({ details }) => {
   const navigation = useNavigation<THomeStackNavigator>();
-  const [showMenu, setShowMenu] = useState(false);
   const hidePaymentInfo = hasOnlyReadPermission("Student");
 
   // Debug logging to see what data is received
@@ -65,22 +64,6 @@ const PaymentDetails: FC<IPaymentDetails> = ({ details }) => {
     return Math.max(0, totalAmount - totalDiscount);
   })();
 
-  const handleMenuPress = () => {
-    setShowMenu(!showMenu);
-  };
-
-  const handleUpdate = () => {
-    setShowMenu(false);
-    // Navigate to UpdatePayment screen for overall payment
-    Alert.alert("Update Payment", "Update overall payment functionality will be implemented here.");
-  };
-
-  const handleRefund = () => {
-    setShowMenu(false);
-    // Navigate to RefundPayment screen for overall payment
-    Alert.alert("Refund Payment", "Refund overall payment functionality will be implemented here.");
-  };
-
   if (hidePaymentInfo) {
     return (
       <PaymentRestrictionNotice
@@ -97,48 +80,12 @@ const PaymentDetails: FC<IPaymentDetails> = ({ details }) => {
         <Flex flexDirection="row" justify="space-between" align="center" styles={styles.cardHeader}>
           <Flex flexDirection="column">
             <ScalableText style={styles.cardTitle} fontFamily="Bold">
-              Course Overall Payment
+              Payment History
             </ScalableText>
-            <ScalableText style={styles.cardSubtitle} fontFamily="SemiBold">
+            {/* <ScalableText style={styles.cardSubtitle} fontFamily="SemiBold">
               {moment().format("MMMM DD, YYYY")}
-            </ScalableText>
+            </ScalableText> */}
           </Flex>
-          
-          {/* Three dot menu */}
-          <View style={styles.menuContainer}>
-            <TouchableOpacity onPress={handleMenuPress} style={styles.menuButton}>
-              <ScalableText style={styles.menuIcon} fontFamily="Bold">⋯</ScalableText>
-            </TouchableOpacity>
-            
-            {showMenu && (
-              <TouchableWithoutFeedback onPress={() => setShowMenu(false)}>
-                <View style={styles.dropdownMenu}>
-                  <TouchableOpacity style={styles.menuItem} onPress={handleUpdate}>
-                    <ScalableText style={styles.menuItemText} fontFamily="Medium">Update</ScalableText>
-                  </TouchableOpacity>
-                  {/* Always show refund button but disable if no payment received */}
-                  <TouchableOpacity 
-                    style={[
-                      styles.menuItem,
-                      (totalReceivedPayment <= 0 && details?.allPaymentDetails?.totalReceivedPayment <= 0) && styles.menuItemDisabled
-                    ]} 
-                    onPress={(totalReceivedPayment > 0 || details?.allPaymentDetails?.totalReceivedPayment > 0) ? handleRefund : undefined}
-                    disabled={(totalReceivedPayment <= 0 && details?.allPaymentDetails?.totalReceivedPayment <= 0)}
-                  >
-                    <ScalableText 
-                      style={{
-                        ...styles.menuItemText,
-                        ...((totalReceivedPayment <= 0 && details?.allPaymentDetails?.totalReceivedPayment <= 0) && styles.menuItemTextDisabled)
-                      }} 
-                      fontFamily="Medium"
-                    >
-                      Refund
-                    </ScalableText>
-                  </TouchableOpacity>
-                </View>
-              </TouchableWithoutFeedback>
-            )}
-          </View>
         </Flex>
         <Flex mt={15}>
           <Grid>
@@ -306,6 +253,7 @@ const PaymentDetails: FC<IPaymentDetails> = ({ details }) => {
             key={course.courseId} 
             course={course} 
             studentRollNo={details.rollNo}
+            isDefaulter={details.studentStatus?.toLowerCase?.() === "defaulter"}
           />
         ))}
       </Flex>
@@ -357,47 +305,5 @@ const styles = StyleSheet.create({
   infoIconText: {
     fontSize: 14,
     color: COLORS.primary,
-  },
-  menuContainer: {
-    position: 'relative',
-  },
-  menuButton: {
-    padding: 8,
-    borderRadius: 4,
-  },
-  menuIcon: {
-    fontSize: 18,
-    color: COLORS.textSecondary,
-    textAlign: 'center',
-  },
-  dropdownMenu: {
-    position: 'absolute',
-    top: 35,
-    right: 0,
-    backgroundColor: COLORS.white,
-    borderRadius: 8,
-    elevation: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    minWidth: 100,
-    zIndex: 1000,
-  },
-  menuItem: {
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
-  },
-  menuItemDisabled: {
-    opacity: 0.5,
-  },
-  menuItemText: {
-    fontSize: 14,
-    color: COLORS.black,
-  },
-  menuItemTextDisabled: {
-    color: COLORS.textSecondary,
   },
 });

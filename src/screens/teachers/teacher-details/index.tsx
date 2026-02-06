@@ -16,6 +16,7 @@ import Center from "../../../@ui/center/Center";
 import ThemeScrollView from "../../../@ui/theme-scroll-view/ThemeScrollView";
 import BatchDetailsTab from "./components/BatchDetailsTab";
 import CourseDetailsTab from "./components/course-details-tab/CourseDetailsTab";
+import SubjectDetailsTab from "./components/subject-details-tab/SubjectDetailsTab";
 import { hasAnyPermissionSync } from "../../../utils/fetchPermissionsTitle";
 import TimetableView from "./components/course-details-tab/Timetable/TimetableView";
 
@@ -44,7 +45,7 @@ const TeacherDetails = () => {
   return (
     <SafeView>
       <AppHeader
-        title="Teacher List"
+        title="Teacher Details"
         handleBackClick={() => navigation.goBack()}
         leftSection={
           <ActionIcon
@@ -65,6 +66,7 @@ const TeacherDetails = () => {
           tabs={[
             { value: "Course Details", label: "Course Details" },
             { label: "Batch Details", value: "Batch Details" },
+            { label: "Subject Details", value: "Subject Details" },
             { label: "Time Table", value: "Time Table" },
           ]}
         />
@@ -76,13 +78,16 @@ const TeacherDetails = () => {
         paddingHorizontal={10}
       >
         {tab === "Batch Details" && (
-          <BatchDetailsTab batches={teacherDetails?.batch ?? []} />
+          <BatchDetailsTab teacherId={teacherId} />
         )}
         {tab === "Course Details" && (
-          <CourseDetailsTab courses={teacherDetails?.courses ?? []}/>
+          <CourseDetailsTab teacherId={teacherId} />
+        )}
+        {tab === "Subject Details" && (
+          <SubjectDetailsTab teacherId={teacherId} />
         )}
         {tab === "Time Table" && (
-          <TimetableView teacherId={teacherId}/>
+          <TimetableView />
         )}
       </ThemeScrollView>
     </SafeView>

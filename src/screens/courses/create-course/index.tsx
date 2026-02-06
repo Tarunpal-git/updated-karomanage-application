@@ -1,3 +1,5 @@
+
+
 import React, { useState } from "react";
 import SafeView from "../../../@ui/safe-view/SafeView";
 import AppHeader from "../../../@ui/app-header/AppHeader";
@@ -18,11 +20,11 @@ import { useQueryClient } from "@tanstack/react-query";
 import { apiUrls } from "../../../apis/urls";
 import { store } from "../../../app/store";
 
-const DURATION_YEAR_OPTIONS = Array.from({ length: 6 }, (_, i) => ({
+const DURATION_YEAR_OPTIONS = Array.from({ length: 5 }, (_, i) => ({
   label: `${i + 1} Year${i === 0 ? "" : "s"}`,
   value: `${i + 1}`,
 }));
-const DURATION_MONTH_OPTIONS = Array.from({ length: 12 }, (_, i) => ({
+const DURATION_MONTH_OPTIONS = Array.from({ length: 11 }, (_, i) => ({
   label: `${i + 1} Month${i === 0 ? "" : "s"}`,
   value: `${i + 1}`,
 }));
@@ -102,30 +104,51 @@ const CreateCourse = () => {
         cgstAmount: 0,
         sgstAmount: 0,
         totalGSTAmount: 0,
-        amountAfterGST: baseAmount
+        amountAfterGST: baseAmount,
+        tuitionFee: baseAmount
       };
     }
-    
-    const cgstAmount = gstRuleData.cgstEnabled ? (baseAmount * gstRuleData.cgstPercentage) / 100 : 0;
-    const sgstAmount = gstRuleData.sgstEnabled ? (baseAmount * gstRuleData.sgstPercentage) / 100 : 0;
-    const totalGSTAmount = cgstAmount + sgstAmount;
-    
+  
+    let cgstAmount = 0;
+    let sgstAmount = 0;
+    let tuitionFee = baseAmount;
     let amountAfterGST = baseAmount;
-    if (gstRuleData.inclusionType === 'excluded') {
-      // GST is added on top of base amount
-      amountAfterGST = baseAmount + totalGSTAmount;
-    } else if (gstRuleData.inclusionType === 'included') {
-      // GST is already included in base amount
+  
+    if (gstRuleData.inclusionType === 'included') {
+      cgstAmount = gstRuleData.cgstEnabled
+        ? Math.round((baseAmount * gstRuleData.cgstPercentage) / 100)
+        : 0;
+  
+      sgstAmount = gstRuleData.sgstEnabled
+        ? Math.round((baseAmount * gstRuleData.sgstPercentage) / 100)
+        : 0;
+  
+      tuitionFee = baseAmount - (cgstAmount + sgstAmount);
       amountAfterGST = baseAmount;
     }
-    
+  
+    if (gstRuleData.inclusionType === 'excluded') {
+      cgstAmount = gstRuleData.cgstEnabled
+        ? Math.round((baseAmount * gstRuleData.cgstPercentage) / 100)
+        : 0;
+  
+      sgstAmount = gstRuleData.sgstEnabled
+        ? Math.round((baseAmount * gstRuleData.sgstPercentage) / 100)
+        : 0;
+  
+      tuitionFee = baseAmount;
+      amountAfterGST = baseAmount + cgstAmount + sgstAmount;
+    }
+  
     return {
-      cgstAmount: Math.round(cgstAmount),
-      sgstAmount: Math.round(sgstAmount),
-      totalGSTAmount: Math.round(totalGSTAmount),
-      amountAfterGST: Math.round(amountAfterGST)
+      cgstAmount,
+      sgstAmount,
+      totalGSTAmount: cgstAmount + sgstAmount,
+      amountAfterGST,
+      tuitionFee
     };
   };
+  
 
   // Get current course fee for GST calculations
   const currentCourseFee = parseFloat(handler.watch('courseFee')) || 0;
@@ -146,7 +169,7 @@ const CreateCourse = () => {
             </ScalableText>
             <View style={styles.inputSpacing}>
               <ScalableText style={styles.inputLabel} fontFamily="Medium">
-                Course Name*
+              Name*
               </ScalableText>
               <Input
                 handler={handler}
@@ -168,7 +191,7 @@ const CreateCourse = () => {
             </View>
             <View style={styles.inputSpacing}>
               <ScalableText style={styles.inputLabel} fontFamily="Medium">
-                Course Description
+              Description
               </ScalableText>
               <Input
                 handler={handler}
@@ -191,7 +214,7 @@ const CreateCourse = () => {
             </View>
             <View style={styles.inputSpacing}>
               <ScalableText style={styles.inputLabel} fontFamily="Medium">
-                Course Fee*
+              Fee*
               </ScalableText>
               <Input
                 handler={handler}
@@ -216,16 +239,17 @@ const CreateCourse = () => {
               {gstRuleData && gstRuleData.inclusionType !== 'noGST' && currentCourseFee > 0 && (
                 <View style={styles.gstBreakdownContainer}>
                   <ScalableText style={styles.gstBreakdownTitle} fontFamily="Medium">
-                    Course Fee Breakdown
+                  Fee Breakdown
                   </ScalableText>
                   
                   {/* Tuition Fee (Excl. GST) - Show for both included and excluded GST */}
                   <View style={styles.breakdownRow}>
-                    <ScalableText style={styles.breakdownLabel} fontFamily="Regular">
-                      Tuition Fee (Excl. GST):
-                    </ScalableText>
+                  <ScalableText style={styles.breakdownLabel} fontFamily="Regular">
+  Tuition Fee:{'\n'}(Excl. GST)
+</ScalableText>
+                    
                     <ScalableText style={styles.breakdownValue} fontFamily="Medium">
-                      ₹{gstRuleData.inclusionType === 'included' ? gstAmounts.amountAfterGST.toLocaleString('en-IN') : currentCourseFee.toLocaleString('en-IN')}.00
+                    ₹{gstAmounts.tuitionFee.toLocaleString('en-IN')}.00
                     </ScalableText>
                   </View>
                   
@@ -267,7 +291,7 @@ const CreateCourse = () => {
             </View>
             <View style={styles.inputSpacing}>
               <ScalableText style={styles.inputLabel} fontFamily="Medium">
-                Course Fee Description
+              Fee Description
               </ScalableText>
               <Input
                 handler={handler}
@@ -289,7 +313,7 @@ const CreateCourse = () => {
             </View>
             <View style={styles.inputSpacing}>
               <ScalableText style={styles.inputLabel} fontFamily="Medium">
-                Course Duration (Year)
+                Duration (Year)
               </ScalableText>
               <ControlledSelect
                 handler={handler}
@@ -298,11 +322,16 @@ const CreateCourse = () => {
                 options={DURATION_YEAR_OPTIONS}
                 value={DURATION_YEAR_OPTIONS.find((c) => c.value === handler.watch("courseDurationYear")) || { label: "", value: "" }}
                 dropdownButtonStyle={styles.inputContainer}
+                showClearButton={true}
+                onClear={() => {
+                  handler.setValue("courseDurationYear", "");
+                  handler.setValue("courseDurationMonth", "");
+                }}
               />
             </View>
             <View style={styles.inputSpacing}>
               <ScalableText style={styles.inputLabel} fontFamily="Medium">
-                Course Duration (Month)
+              Duration (Month)
               </ScalableText>
               <ControlledSelect
                 handler={handler}
@@ -311,6 +340,11 @@ const CreateCourse = () => {
                 options={DURATION_MONTH_OPTIONS}
                 value={DURATION_MONTH_OPTIONS.find((c) => c.value === handler.watch("courseDurationMonth")) || { label: "", value: "" }}
                 dropdownButtonStyle={styles.inputContainer}
+                showClearButton={true}
+                onClear={() => {
+                  handler.setValue("courseDurationYear", "");
+                  handler.setValue("courseDurationMonth", "");
+                }}
               />
             </View>
             <View style={styles.inputSpacing}>
@@ -463,7 +497,7 @@ const styles = StyleSheet.create({
   },
   inputLabel: {
     fontSize: 15,
-    marginBottom: 8,
+    marginBottom: -1,
     color: COLORS.black,
     fontFamily: "Poppins-Medium",
   },
@@ -552,3 +586,27 @@ const styles = StyleSheet.create({
     width: "80%",
   },
 }); 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

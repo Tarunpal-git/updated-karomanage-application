@@ -864,7 +864,7 @@ const styles = StyleSheet.create({
   buttonsContainer: {
     flexDirection: "row",
     width: "90%",
-    height: "11%",
+    height: "13%",
   },
   button: {
     flex: 1,

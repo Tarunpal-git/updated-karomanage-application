@@ -10,6 +10,8 @@ import { useBatchDetailsQuery } from "../../../../../apis/hooks/batch/query/useB
 import { useReassignBatchForCourseStudentMutation } from "../../../../../apis/hooks/students/mutation/useReassignBatchForCourseStudent.mutation";
 import { useSelector } from "react-redux";
 import { RootState } from "../../../../../app/store";
+import { useNavigation } from "@react-navigation/native";
+import { TScreenNavigator } from "../../../../../types/navigator/screen-navigator";
 import { COLORS } from "../../../../../colors";
 import { hasUpdatePermission } from "../../../../../utils/fetchPermissionsTitle";
 import ActionIcon from "../../../../../@ui/action-icon/ActionIcon";
@@ -35,6 +37,7 @@ const CourseDetailRow: FC<ICourseDetailRow> = ({
   coupons = [],
   onCourseDeleted,
 }) => {
+  const navigation = useNavigation<TScreenNavigator>();
   const { data, isLoading } = useCourseDetailsQuery({ courseId });
   const { mutateAsync: removeCourse, isPending } = useRemoveCourseStudentMutation();
   const { data: batchListsData, isLoading: batchLoading } = useBatchListsQuery();
@@ -435,12 +438,14 @@ const CourseDetailRow: FC<ICourseDetailRow> = ({
               </View>
               <TouchableOpacity
                 style={styles.modalPlusButton}
-                // Optional: Hook up to CreateBatch screen later if needed
                 onPress={() => {
-                  Alert.alert(
-                    "Info",
-                    "Create Batch flow is available in Batch module."
-                  );
+                  // Close modal state before navigating to create batch
+                  setIsReassignModalVisible(false);
+                  setSelectedBatchOption(null);
+                  setIsBatchDropdownOpen(false);
+
+                  // Navigate to global CreateBatch flow with courseId
+                  navigation.navigate("CreateBatch", { courseId });
                 }}
               >
                 <ScalableText

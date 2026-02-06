@@ -23,6 +23,9 @@ const ActionPopover: FC<IActionPopover> = ({ row, refetch }) => {
 
   const [statusModal, setStatusModal] = useState(false);
 
+  // Check if status is "student"
+  const isStudentStatus = row.status?.toLowerCase() === "student";
+
   return (
     <>
       <Tooltip
@@ -39,19 +42,24 @@ const ActionPopover: FC<IActionPopover> = ({ row, refetch }) => {
         }}
         content={
           <View>
-            <TouchableOpacity
-              onPress={() => {
-                navigation.navigate("EditEnquiryDetails", { id: row.id });
-                togglePopover();
-              }}
-            >
-              <Flex my={8}>
-                <AutoHeightImage source={IMAGES.assignIconBlue} width={23} />
-                <ScalableText style={styles.optionText} fontFamily="Medium">
-                  Edit
-                </ScalableText>
-              </Flex>
-            </TouchableOpacity>
+            {!isStudentStatus && (
+              <TouchableOpacity
+                onPress={() => {
+                  navigation.navigate("EditEnquiryDetails", { 
+                    id: row.id,
+                    enquiryData: row 
+                  });
+                  togglePopover();
+                }}
+              >
+                <Flex my={8}>
+                  <AutoHeightImage source={IMAGES.assignIconBlue} width={23} />
+                  <ScalableText style={styles.optionText} fontFamily="Medium">
+                    Edit
+                  </ScalableText>
+                </Flex>
+              </TouchableOpacity>
+            )}
             <TouchableOpacity
               onPress={() => {
                 navigation.navigate("AssignManager", { leads: [row] });
@@ -65,19 +73,21 @@ const ActionPopover: FC<IActionPopover> = ({ row, refetch }) => {
                 </ScalableText>
               </Flex>
             </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => {
-                setStatusModal(true);
-                togglePopover();
-              }}
-            >
-              <Flex my={8}>
-                <AutoHeightImage source={IMAGES.editStatusIcon} width={20} />
-                <ScalableText style={styles.optionText} fontFamily="Medium">
-                  Status
-                </ScalableText>
-              </Flex>
-            </TouchableOpacity>
+            {!isStudentStatus && (
+              <TouchableOpacity
+                onPress={() => {
+                  setStatusModal(true);
+                  togglePopover();
+                }}
+              >
+                <Flex my={8}>
+                  <AutoHeightImage source={IMAGES.editStatusIcon} width={20} />
+                  <ScalableText style={styles.optionText} fontFamily="Medium">
+                    Status
+                  </ScalableText>
+                </Flex>
+              </TouchableOpacity>
+            )}
           </View>
         }
         arrowSize={{ width: 0, height: 0 }}
@@ -95,6 +105,7 @@ const ActionPopover: FC<IActionPopover> = ({ row, refetch }) => {
         <UpdateEnquiryStatusModal
           handleClose={() => setStatusModal(false)}
           id={row.id}
+          leadId={row.leadId}
           isVisible={statusModal}
           refetch={refetch}
         />

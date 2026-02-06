@@ -21,8 +21,8 @@ const EditEnquiryDetails = () => {
   const navigation = useNavigation<TScreenNavigator>();
   const { mutateAsync, isPending } = useUpdateStudentEnquiryMutation();
 
-  const { id } =
-    useRoute<RouteProp<TScreenNavigatorParams, "EnquiryDetails">>().params;
+  const { id, enquiryData } =
+    useRoute<RouteProp<TScreenNavigatorParams, "EditEnquiryDetails">>().params;
   const { data, isLoading } = useEnquiryDetailsQuery(id);
 
   const handler = useForm({
@@ -34,14 +34,24 @@ const EditEnquiryDetails = () => {
   });
 
   useEffect(() => {
-    if (!isLoading && data?.dataArray) {
+    // If enquiryData is passed from navigation, use it to prefill the form
+    if (enquiryData) {
+      handler.reset({
+        studentName: enquiryData.studentName || "",
+        email: enquiryData.email || "",
+        mobileNumber: enquiryData.mobileNumber || "",
+        enquiryCourse: enquiryData.enquiryCourse || "",
+        courseDescription: enquiryData.courseDescription || "",
+      });
+    } else if (!isLoading && data?.dataArray) {
+      // Otherwise, use API data
       handler.reset({
         ...data?.dataArray,
       });
     } else {
       handler.reset(forms.generateEnquiry.values);
     }
-  }, [isLoading, data]);
+  }, [isLoading, data, enquiryData]);
 
   const onSubmit = async (values: TEnquiryData) => {
     const res = await mutateAsync({

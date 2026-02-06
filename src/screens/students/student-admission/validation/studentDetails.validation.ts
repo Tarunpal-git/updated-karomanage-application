@@ -30,7 +30,7 @@ export const studentDetailsValidation = yup.object().shape({
   
   studentContact: yup.string()
     .required('Phone number is required')
-    .matches(/^[6-9]\d{9}$/, 'Please enter a valid 10-digit phone number starting with 6, 7, 8, or 9')
+    .matches(/^[6-9]\d{9}$/, 'Please enter a valid 10-digit phone number ')
     .test('phone-format', 'Please enter a valid 10-digit phone number', function(value) {
       if (!value) return false;
       const cleanValue = value.replace(/\D/g, '');
